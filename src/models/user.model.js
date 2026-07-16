@@ -22,16 +22,22 @@ const userSchema = new moongose.Schema({
         type: String,
         enum:["local", "google"],
         default: "local"
-    }
+    },
     // refferalCode: {
     //     type: String,
     //     unique: true,
     //     required: true
     // },
+    resetPasswordToken: {
+        type: String
+    },
+    resetPasswordExpire: {
+        type: Date
+    }
 
 },{timestamps: true})
 
-const User = moongose.model('User', userSchema)
+ const User = moongose.model('User', userSchema)
 
-export default User
 
+export default User 
