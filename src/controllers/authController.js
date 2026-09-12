@@ -10,34 +10,163 @@ const clientId = new OAuth2Client(process.env.CLIENT_ID);
 
 const register = async (req, res) => {
   console.log(req.body);
-  // Registration logic here
-  const { email, password, referalCode } = req.body;
+
+  const {
+    email,
+    password,
+    referralCode,
+  } = req.body;
 
   try {
-
-    const existingUser = await User.findOne({ email });
-    if (existingUser) {
-      return res.status(400).json({ message: 'User already exists' });
+    // -------------------------
+    // Validate required fields
+    // -------------------------
+    if (!email || !password) {
+      return res.status(400).json({
+        success: false,
+        message: "Email and password are required",
+      });
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10);
-    const user = await User.create({ email, password: hashedPassword, referalCode });
+    if (password.length < 8) {
+      return res.status(400).json({
+        success: false,
+        message: "Password must be at least 8 characters",
+      });
+    }
 
-    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '1h' });
+    // -------------------------
+    // Normalize email
+    // -------------------------
+    const normalizedEmail = email
+      .trim()
+      .toLowerCase();
 
+    // -------------------------
+    // Check existing user
+    // -------------------------
+    const existingUser = await User.findOne({
+      email: normalizedEmail,
+    });
+
+    if (existingUser) {
+      return res.status(400).json({
+        success: false,
+        message: "User already exists",
+      });
+    }
+
+    // -------------------------
+    // Find referring user
+    // -------------------------
+    let referrer = null;
+
+    if (referralCode && referralCode.trim()) {
+      const normalizedReferralCode = referralCode
+        .trim()
+        .toUpperCase();
+
+      referrer = await User.findOne({
+        referralCode: normalizedReferralCode,
+      });
+
+      if (!referrer) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid referral code",
+        });
+      }
+    }
+
+    // -------------------------
+    // Generate unique referral code
+    // -------------------------
+    let newReferralCode;
+    let codeExists = true;
+
+    while (codeExists) {
+      newReferralCode =
+        "CMX" +
+        crypto
+          .randomBytes(4)
+          .toString("hex")
+          .toUpperCase();
+
+      codeExists = await User.exists({
+        referralCode: newReferralCode,
+      });
+    }
+
+    // -------------------------
+    // Hash password
+    // -------------------------
+    const hashedPassword = await bcrypt.hash(
+      password,
+      10
+    );
+
+    // -------------------------
+    // Create user
+    // -------------------------
+    const user = await User.create({
+      email: normalizedEmail,
+      password: hashedPassword,
+
+      // User's own referral code
+      referralCode: newReferralCode,
+
+      // Person who referred this user
+      referredBy: referrer
+        ? referrer._id
+        : null,
+
+      // New users always start at Level 1
+      teamLevel: 1,
+
+      // Account requires deposit activation
+      accountStatus: "PENDING",
+
+      provider: "local",
+    });
+
+    // -------------------------
+    // Create JWT
+    // -------------------------
+    const token = jwt.sign(
+      { id: user._id },
+      process.env.JWT_SECRET,
+      {
+        expiresIn: "1h",
+      }
+    );
+
+    // -------------------------
+    // Response
+    // -------------------------
     res.status(201).json({
       success: true,
+
       token,
-      user: { id: user._id, email: user.email },
-      message: { "success": "User registered successfully" }
 
-    }
+      user: {
+        id: user._id,
+        email: user.email,
+        referralCode: user.referralCode,
+        accountStatus: user.accountStatus,
+      },
 
-    );
+      message: "User registered successfully",
+    });
+
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error("Register error:", error);
+
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
   }
-}
+};
 
 const login = async (req, res) => {
   // Login logic here
