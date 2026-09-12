@@ -12,6 +12,8 @@ const register = async (req, res) => {
   console.log(req.body);
 
   const {
+    fullName,
+    username,
     email,
     password,
     referralCode,
@@ -21,26 +23,34 @@ const register = async (req, res) => {
     // -------------------------
     // Validate required fields
     // -------------------------
-    if (!email || !password) {
+    if (!fullName || !email || !password) {
       return res.status(400).json({
         success: false,
-        message: "Email and password are required",
+        message:
+          "Full name, email and password are required",
       });
     }
 
     if (password.length < 8) {
       return res.status(400).json({
         success: false,
-        message: "Password must be at least 8 characters",
+        message:
+          "Password must be at least 8 characters",
       });
     }
 
     // -------------------------
-    // Normalize email
+    // Normalize values
     // -------------------------
     const normalizedEmail = email
       .trim()
       .toLowerCase();
+
+    const normalizedFullName = fullName.trim();
+
+    const normalizedUsername = username
+      ? username.trim().toLowerCase()
+      : "";
 
     // -------------------------
     // Check existing user
@@ -62,9 +72,8 @@ const register = async (req, res) => {
     let referrer = null;
 
     if (referralCode && referralCode.trim()) {
-      const normalizedReferralCode = referralCode
-        .trim()
-        .toUpperCase();
+      const normalizedReferralCode =
+        referralCode.trim().toUpperCase();
 
       referrer = await User.findOne({
         referralCode: normalizedReferralCode,
@@ -100,10 +109,8 @@ const register = async (req, res) => {
     // -------------------------
     // Hash password
     // -------------------------
-    const hashedPassword = await bcrypt.hash(
-      password,
-      10
-    );
+    const hashedPassword =
+      await bcrypt.hash(password, 10);
 
     // -------------------------
     // Create user
@@ -112,21 +119,28 @@ const register = async (req, res) => {
       email: normalizedEmail,
       password: hashedPassword,
 
-      // User's own referral code
+      fullName: normalizedFullName,
+      username: normalizedUsername,
+
+      // Email/password account
+      provider: "local",
+
+      // No Google photo for local signup
+      avatarUrl: "",
+
+      // Referral
       referralCode: newReferralCode,
 
-      // Person who referred this user
       referredBy: referrer
         ? referrer._id
         : null,
 
-      // New users always start at Level 1
       teamLevel: 1,
 
-      // Account requires deposit activation
+      // Account requires activation
       accountStatus: "PENDING",
 
-      provider: "local",
+      activatedAt: null,
     });
 
     // -------------------------
@@ -143,25 +157,27 @@ const register = async (req, res) => {
     // -------------------------
     // Response
     // -------------------------
-    res.status(201).json({
+    return res.status(201).json({
       success: true,
 
       token,
 
       user: {
         id: user._id,
+        fullName: user.fullName,
+        username: user.username,
         email: user.email,
+        avatarUrl: user.avatarUrl,
         referralCode: user.referralCode,
         accountStatus: user.accountStatus,
       },
 
       message: "User registered successfully",
     });
-
   } catch (error) {
     console.error("Register error:", error);
 
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: error.message,
     });
@@ -169,48 +185,88 @@ const register = async (req, res) => {
 };
 
 const login = async (req, res) => {
-  // Login logic here
   const { email, password } = req.body;
-
 
   try {
     if (!email || !password) {
       return res.status(400).json({
         success: false,
-        message: "Please provide email and password"
+        message:
+          "Please provide email and password",
       });
     }
 
-    const user = await User.findOne({ email });
-    if (!user) {
-      return res.status(400).json({ message: "User not found, please register first" });
+    const normalizedEmail =
+      email.trim().toLowerCase();
 
-    }
-
-    const isPasswordValid = await bcrypt.compare(password, user.password);
-
-    if (!isPasswordValid) {
-      return res.status(400).json({ message: "Invalid password" });
-    }
-
-    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '1h' });
-
-    res.json({
-      success: true,
-      token,
-      user: { id: user._id, email: user.email }
+    const user = await User.findOne({
+      email: normalizedEmail,
     });
 
+    if (!user) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "User not found, please register first",
+      });
+    }
+
+    // Google-only account
+    if (!user.password) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "This account uses Google login. Please continue with Google.",
+      });
+    }
+
+    const isPasswordValid =
+      await bcrypt.compare(
+        password,
+        user.password
+      );
+
+    if (!isPasswordValid) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid password",
+      });
+    }
+
+    const token = jwt.sign(
+      { id: user._id },
+      process.env.JWT_SECRET,
+      {
+        expiresIn: "1h",
+      }
+    );
+
+    return res.json({
+      success: true,
+
+      token,
+
+      user: {
+        id: user._id,
+        fullName: user.fullName,
+        username: user.username,
+        email: user.email,
+        avatarUrl: user.avatarUrl,
+        referralCode: user.referralCode,
+        accountStatus: user.accountStatus,
+      },
+
+      message: "Login successful",
+    });
   } catch (err) {
-    res.status(500).json({
+    console.error("Login error:", err);
+
+    return res.status(500).json({
       success: false,
-      message: err.message
-    })
+      message: err.message,
+    });
   }
-
-
-
-}
+};
 
 const getMe = async (req, res) => {
   try {
@@ -218,14 +274,26 @@ const getMe = async (req, res) => {
       req.user.id
     ).select("-password");
 
-    res.status(200).json({
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    return res.status(200).json({
       success: true,
       user,
     });
   } catch (error) {
-    res.status(500).json({
+    console.error(
+      "Get current user error:",
+      error
+    );
+
+    return res.status(500).json({
       success: false,
-      message: error.message,
+      message: "Unable to fetch user",
     });
   }
 };
@@ -241,6 +309,9 @@ const googleLogin = async (req, res) => {
       });
     }
 
+    // -------------------------
+    // Verify Google token
+    // -------------------------
     const ticket = await clientId.verifyIdToken({
       idToken: token,
       audience: process.env.GOOGLE_CLIENT_ID,
@@ -248,20 +319,36 @@ const googleLogin = async (req, res) => {
 
     const payload = ticket.getPayload();
 
-    const email = payload.email?.trim().toLowerCase();
+    const email =
+      payload.email?.trim().toLowerCase();
+
     const googleId = payload.sub;
+
+    const googleName =
+      payload.name?.trim() ||
+      "CryptoMintX User";
+
+    const googleAvatar =
+      payload.picture || "";
 
     if (!email || !googleId) {
       return res.status(400).json({
         success: false,
-        message: "Invalid Google account information",
+        message:
+          "Invalid Google account information",
       });
     }
 
-    let user = await User.findOne({ email });
+    // -------------------------
+    // Find existing user
+    // -------------------------
+    let user = await User.findOne({
+      email,
+    });
 
-
-    // Generate a referral code when needed
+    // -------------------------
+    // Generate referral code
+    // -------------------------
     const generateReferralCode = async () => {
       let referralCode;
       let codeExists = true;
@@ -282,21 +369,41 @@ const googleLogin = async (req, res) => {
       return referralCode;
     };
 
+    // -------------------------
     // Existing user
+    // -------------------------
     if (user) {
       let needsSave = false;
 
-      // Link Google account if this email already
-      // belongs to a local account.
+      // Link Google account
       if (!user.googleId) {
         user.googleId = googleId;
         needsSave = true;
       }
 
-      // Repair older Google users that don't have
-      // the newer account fields.
+      // Add Google name if missing
+      if (
+        !user.fullName ||
+        user.fullName === "CryptoMintX User"
+      ) {
+        user.fullName = googleName;
+        needsSave = true;
+      }
+
+      // Add Google profile picture
+      if (
+        googleAvatar &&
+        user.avatarUrl !== googleAvatar
+      ) {
+        user.avatarUrl = googleAvatar;
+        needsSave = true;
+      }
+
+      // Repair older users
       if (!user.referralCode) {
-        user.referralCode = await generateReferralCode();
+        user.referralCode =
+          await generateReferralCode();
+
         needsSave = true;
       }
 
@@ -315,23 +422,41 @@ const googleLogin = async (req, res) => {
       }
     }
 
+    // -------------------------
     // New Google user
+    // -------------------------
     if (!user) {
-      const referralCode = await generateReferralCode();
+      const referralCode =
+        await generateReferralCode();
 
       user = await User.create({
         email,
         googleId,
+
         provider: "google",
+
+        fullName: googleName,
+        username: "",
+
+        phone: "",
+
+        avatarUrl: googleAvatar,
+
         referralCode,
+
         referredBy: null,
+
         teamLevel: 1,
+
         accountStatus: "PENDING",
+
         activatedAt: null,
       });
     }
 
-    // Generate our application's JWT
+    // -------------------------
+    // Create JWT
+    // -------------------------
     const jwtToken = jwt.sign(
       { id: user._id },
       process.env.JWT_SECRET,
@@ -340,22 +465,33 @@ const googleLogin = async (req, res) => {
       }
     );
 
-    res.status(200).json({
+    // -------------------------
+    // Response
+    // -------------------------
+    return res.status(200).json({
       success: true,
+
       token: jwtToken,
+
       user: {
         id: user._id,
+        fullName: user.fullName,
+        username: user.username,
         email: user.email,
+        avatarUrl: user.avatarUrl,
         referralCode: user.referralCode,
         accountStatus: user.accountStatus,
       },
+
       message: "Google login successful",
     });
-
   } catch (error) {
-    console.error("Google login error:", error);
+    console.error(
+      "Google login error:",
+      error
+    );
 
-    res.status(401).json({
+    return res.status(401).json({
       success: false,
       message: "Google authentication failed",
     });
