@@ -234,6 +234,13 @@ const googleLogin = async (req, res) => {
   try {
     const { token } = req.body;
 
+    if (!token) {
+      return res.status(400).json({
+        success: false,
+        message: "Google token is required",
+      });
+    }
+
     const ticket = await clientId.verifyIdToken({
       idToken: token,
       audience: process.env.GOOGLE_CLIENT_ID,
@@ -241,23 +248,95 @@ const googleLogin = async (req, res) => {
 
     const payload = ticket.getPayload();
 
-    const email = payload.email;
+    const email = payload.email?.trim().toLowerCase();
     const googleId = payload.sub;
+
+    if (!email || !googleId) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid Google account information",
+      });
+    }
 
     let user = await User.findOne({ email });
 
+    // Generate a referral code when needed
+    const generateReferralCode = async () => {
+      let referralCode;
+      let codeExists = true;
+
+      while (codeExists) {
+        referralCode =
+          "CMX" +
+          crypto
+            .randomBytes(4)
+            .toString("hex")
+            .toUpperCase();
+
+        codeExists = await User.exists({
+          referralCode,
+        });
+      }
+
+      return referralCode;
+    };
+
+    // Existing user
+    if (user) {
+      let needsSave = false;
+
+      // Link Google account if this email already
+      // belongs to a local account.
+      if (!user.googleId) {
+        user.googleId = googleId;
+        needsSave = true;
+      }
+
+      // Repair older Google users that don't have
+      // the newer account fields.
+      if (!user.referralCode) {
+        user.referralCode = await generateReferralCode();
+        needsSave = true;
+      }
+
+      if (!user.teamLevel) {
+        user.teamLevel = 1;
+        needsSave = true;
+      }
+
+      if (!user.accountStatus) {
+        user.accountStatus = "PENDING";
+        needsSave = true;
+      }
+
+      if (needsSave) {
+        await user.save();
+      }
+    }
+
+    // New Google user
     if (!user) {
+      const referralCode = await generateReferralCode();
+
       user = await User.create({
         email,
         googleId,
         provider: "google",
+        referralCode,
+        referredBy: null,
+        teamLevel: 1,
+        accountStatus: "PENDING",
+        activatedAt: null,
       });
     }
 
+    // Generate our application's JWT
     const jwtToken = jwt.sign(
       { id: user._id },
       process.env.JWT_SECRET,
-      { expiresIn: "1h" }
+      {
+        expiresIn: "1h",
+      }
     );
 
     res.status(200).json({
@@ -266,14 +345,18 @@ const googleLogin = async (req, res) => {
       user: {
         id: user._id,
         email: user.email,
+        referralCode: user.referralCode,
+        accountStatus: user.accountStatus,
       },
+      message: "Google login successful",
     });
-  } catch (error) {
-    console.error(error); // Keep this while debugging
 
-    res.status(500).json({
+  } catch (error) {
+    console.error("Google login error:", error);
+
+    res.status(401).json({
       success: false,
-      message: error.message,
+      message: "Google authentication failed",
     });
   }
 };
