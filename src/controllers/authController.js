@@ -260,6 +260,7 @@ const googleLogin = async (req, res) => {
 
     let user = await User.findOne({ email });
 
+
     // Generate a referral code when needed
     const generateReferralCode = async () => {
       let referralCode;
