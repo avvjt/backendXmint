@@ -366,24 +366,47 @@ const forgotPassword = async (req, res) => {
   const { email } = req.body;
 
   try {
-    const user = await User.findOne({ email });
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: "Email is required",
+      });
     }
 
-    // Generate random token
-    const resetToken = crypto.randomBytes(32).toString("hex");
+    const normalizedEmail = email.trim().toLowerCase();
 
-    // Save token and expiry
+    const user = await User.findOne({
+      email: normalizedEmail,
+    });
+
+    // Don't reveal whether an account exists
+    if (!user) {
+      return res.status(200).json({
+        success: true,
+        message:
+          "If an account exists with this email, a password reset link has been sent.",
+      });
+    }
+
+    // Generate secure random token
+    const resetToken = crypto
+      .randomBytes(32)
+      .toString("hex");
+
+    // Token expires in 15 minutes
     user.resetPasswordToken = resetToken;
-    user.resetPasswordExpire = Date.now() + 15 * 60 * 1000; // 15 minutes
+    user.resetPasswordExpire = new Date(
+      Date.now() + 15 * 60 * 1000
+    );
 
     await user.save();
 
-    // Reset URL
-    const resetUrl = `http://localhost:5173/reset-password/${resetToken}`;
+    // IMPORTANT:
+    // Frontend = 5173
+    // Backend = 3000
+    const resetUrl =
+      `http://localhost:5173/reset-password/${resetToken}`;
 
-    // HTML Email
     const htmlTemplate = `
 <!DOCTYPE html>
 <html>
@@ -392,7 +415,12 @@ const forgotPassword = async (req, res) => {
 <title>Reset Password</title>
 </head>
 
-<body style="margin:0;padding:40px;background:#f4f6fb;font-family:Arial,sans-serif;">
+<body style="
+margin:0;
+padding:40px;
+background:#f4f6fb;
+font-family:Arial,sans-serif;
+">
 
 <table width="100%" cellpadding="0" cellspacing="0">
 <tr>
@@ -403,19 +431,16 @@ style="
 background:#ffffff;
 border-radius:16px;
 overflow:hidden;
-box-shadow:0 8px 30px rgba(0,0,0,.08);
 ">
 
 <tr>
-<td
-style="
+<td style="
 background:#1D66FF;
 padding:40px;
 text-align:center;
 ">
 
-<h1
-style="
+<h1 style="
 margin:0;
 color:white;
 font-size:34px;
@@ -423,12 +448,10 @@ font-size:34px;
 CryptoMintX
 </h1>
 
-<p
-style="
+<p style="
 margin-top:10px;
 color:white;
 font-size:16px;
-opacity:.9;
 ">
 Secure Password Reset
 </p>
@@ -439,21 +462,31 @@ Secure Password Reset
 <tr>
 <td style="padding:40px;">
 
-<h2 style="margin-top:0;color:#111827;">
+<h2 style="
+margin-top:0;
+color:#111827;
+">
 Reset your password
 </h2>
 
-<p style="font-size:16px;color:#4B5563;line-height:1.8;">
-Hello,
+<p style="
+font-size:16px;
+color:#4B5563;
+line-height:1.8;
+">
+We received a request to reset your CryptoMintX
+account password.
 </p>
 
-<p style="font-size:16px;color:#4B5563;line-height:1.8;">
-We received a request to reset your CryptoMintX account password.
-Click the button below to continue.
+<p style="
+font-size:16px;
+color:#4B5563;
+line-height:1.8;
+">
+Click the button below to create a new password.
 </p>
 
-<div
-style="
+<div style="
 margin:40px 0;
 text-align:center;
 ">
@@ -475,31 +508,45 @@ Reset Password
 
 </div>
 
-<p style="font-size:15px;color:#6B7280;">
+<p style="
+font-size:15px;
+color:#6B7280;
+">
 This link expires in
 <strong>15 minutes</strong>.
 </p>
 
-<p style="font-size:15px;color:#6B7280;">
-If the button doesn't work, copy this link into your browser:
+<p style="
+font-size:15px;
+color:#6B7280;
+">
+If you did not request this password reset,
+you can safely ignore this email.
 </p>
 
-<p style="word-break:break-all;">
+<p style="
+word-break:break-all;
+font-size:13px;
+">
+
 <a
 href="${resetUrl}"
 style="color:#1D66FF;">
 ${resetUrl}
 </a>
+
 </p>
 
-<hr style="margin:40px 0;border:none;border-top:1px solid #E5E7EB;">
+<hr style="
+margin:40px 0;
+border:none;
+border-top:1px solid #E5E7EB;
+">
 
-<p style="font-size:14px;color:#6B7280;">
-If you didn't request this password reset,
-you can safely ignore this email.
-</p>
-
-<p style="font-size:13px;color:#9CA3AF;margin-top:30px;">
+<p style="
+font-size:13px;
+color:#9CA3AF;
+">
 CryptoMintX Security Team
 </p>
 
@@ -516,12 +563,11 @@ CryptoMintX Security Team
 </html>
 `;
 
-    // Send email
     await sendEmail(
       user.email,
       "Reset Your CryptoMintX Password",
 
-      // Plain text version
+      // Plain text
       `We received a request to reset your CryptoMintX password.
 
 Reset Password:
@@ -529,22 +575,28 @@ ${resetUrl}
 
 This link expires in 15 minutes.
 
-If you didn't request this, ignore this email.`,
+If you did not request this, you can safely ignore this email.`,
 
-      // HTML version
+      // HTML
       htmlTemplate
     );
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
-      message: "Password reset email sent",
+      message:
+        "If an account exists with this email, a password reset link has been sent.",
     });
 
-
   } catch (error) {
-    res.status(500).json({
+    console.error(
+      "Forgot password error:",
+      error
+    );
+
+    return res.status(500).json({
       success: false,
-      message: error.message,
+      message:
+        "Unable to process password reset request",
     });
   }
 };
@@ -554,40 +606,70 @@ const resetPassword = async (req, res) => {
     const { password } = req.body;
     const { token } = req.params;
 
-    // Find user with matching token
+    if (!token) {
+      return res.status(400).json({
+        success: false,
+        message: "Reset token is required",
+      });
+    }
+
+    if (!password) {
+      return res.status(400).json({
+        success: false,
+        message: "New password is required",
+      });
+    }
+
+    if (password.length < 8) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Password must be at least 8 characters",
+      });
+    }
+
     const user = await User.findOne({
       resetPasswordToken: token,
-      resetPasswordExpire: { $gt: Date.now() },
+      resetPasswordExpire: {
+        $gt: new Date(),
+      },
     });
 
     if (!user) {
       return res.status(400).json({
         success: false,
-        message: "Invalid or expired reset token",
+        message:
+          "Invalid or expired reset token",
       });
     }
 
-    // Hash new password
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const hashedPassword = await bcrypt.hash(
+      password,
+      10
+    );
 
-    // Update password
     user.password = hashedPassword;
 
-    // Remove reset token
+    // Invalidate token after successful reset
     user.resetPasswordToken = undefined;
     user.resetPasswordExpire = undefined;
 
     await user.save();
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       message: "Password reset successfully",
     });
 
   } catch (error) {
-    res.status(500).json({
+    console.error(
+      "Reset password error:",
+      error
+    );
+
+    return res.status(500).json({
       success: false,
-      message: error.message,
+      message: "Unable to reset password",
     });
   }
 };
