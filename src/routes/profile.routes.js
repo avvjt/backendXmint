@@ -6,8 +6,8 @@ import {
   deleteAvatar,
 } from "../controllers/profile.controller.js";
 
-import protect from "../middleware/auth.middleware.js";
-import upload from "../middleware/upload.middleware.js";
+import protect from "../middlewares/auth.middleware.js";
+import upload from "../middlewares/upload.middleware.js";
 
 const router = express.Router();
 
