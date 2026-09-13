@@ -1,5 +1,5 @@
 import express from 'express';
-import { register, login, googleLogin, getMe, forgotPassword, resetPassword } from '../controllers/authController.js';
+import { register, login, googleLogin, getMe, forgotPassword, resetPassword, changePassword } from '../controllers/authController.js';
 import protect from "../middlewares/auth.middleware.js"
 
 
@@ -14,5 +14,6 @@ router.post("/reset-password/:token", resetPassword);
 router.get('/profile', protect, async (req, res) => {
     res.status(200).json({ message: 'Profile retrieved successfully', user: req.user });
 });
+router.patch("/change-password", protect, changePassword);
 
 export default router;

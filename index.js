@@ -3,6 +3,8 @@ import express from "express";
 import db from "./src/db/db.js";
 import authRoutes from "./src/routes/authRoutes.js";
 import cors from "cors";
+import profileRoutes from "./src/routes/profile.routes.js";
+import path from "path";
 
 const app = express();
 app.use(cors({
@@ -13,8 +15,16 @@ app.use(cors({
   credentials: true,
 }));
 
+app.use(
+  "/uploads",
+  express.static(
+    path.join(process.cwd(), "uploads")
+  )
+);
+
 app.use(express.json());
 app.use("/api/auth", authRoutes);
+app.use("/api", profileRoutes);
 
 db();
 
