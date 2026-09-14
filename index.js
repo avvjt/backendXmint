@@ -7,6 +7,7 @@ import profileRoutes from "./src/routes/profile.routes.js";
 import path from "path";
 import walletRoutes from "./src/routes/wallet.routes.js";
 import withdrawalRoutes from "./src/routes/withdrawal.routes.js";
+import devWalletRoutes from "./src/routes/devWallet.routes.js";
 
 
 const app = express();
@@ -30,6 +31,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api", profileRoutes);
 app.use("/api", walletRoutes);
 app.use("/api", withdrawalRoutes);
+app.use("/api", devWalletRoutes);
 
 db();
 
