@@ -42,6 +42,11 @@ const walletSchema = new mongoose.Schema(
             default: 0,
             min: 0,
         },
+        addressIndex: {
+            type: Number,
+            unique: true,
+            sparse: true,
+        },
     },
     {
         timestamps: true,
