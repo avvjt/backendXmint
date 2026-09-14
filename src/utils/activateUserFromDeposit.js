@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import User from "../models/user.model.js";
 import Deposit from "../models/deposit.model.js";
 
@@ -6,10 +7,12 @@ const activateUserFromDeposit = async (userId) => {
     process.env.ACTIVATION_DEPOSIT_MINIMUM || 100
   );
 
+  const userObjectId = new mongoose.Types.ObjectId(userId);
+
   const result = await Deposit.aggregate([
     {
       $match: {
-        user: userId,
+        user: userObjectId,
         status: "CONFIRMED",
       },
     },
@@ -24,7 +27,15 @@ const activateUserFromDeposit = async (userId) => {
   ]);
 
   const totalDeposited =
-    result.length > 0 ? result[0].totalDeposited : 0;
+    result.length > 0
+      ? result[0].totalDeposited
+      : 0;
+
+  console.log("Activation check:", {
+    userId,
+    totalDeposited,
+    minimumDeposit,
+  });
 
   if (totalDeposited < minimumDeposit) {
     return {
@@ -43,6 +54,7 @@ const activateUserFromDeposit = async (userId) => {
   if (user.accountStatus !== "ACTIVE") {
     user.accountStatus = "ACTIVE";
     user.activatedAt = new Date();
+
     await user.save();
   }
 
