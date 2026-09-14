@@ -1,6 +1,7 @@
 import Wallet from "../models/wallet.model.js";
 import Deposit from "../models/deposit.model.js";
 import Transaction from "../models/transaction.model.js";
+import activateUserFromDeposit from "../utils/activateUserFromDeposit.js";
 
 const creditTestBalance = async (req, res) => {
   try {
@@ -59,11 +60,16 @@ const creditTestBalance = async (req, res) => {
       description: "Development test deposit",
     });
 
+    const activation = await activateUserFromDeposit(
+  req.user.id
+);
+
     return res.status(200).json({
-      success: true,
-      message: "Test balance credited successfully",
-      balance: wallet.availableBalance,
-    });
+  success: true,
+  message: "Test balance credited successfully",
+  balance: wallet.availableBalance,
+  activation,
+});
   } catch (error) {
     console.error("Test wallet credit error:", error);
 
