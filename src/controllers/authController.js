@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken';
 import { OAuth2Client } from 'google-auth-library';
 import crypto from "crypto";
 import sendEmail from "../utils/sendEmail.js";
+import createWalletForUser from "../utils/createWallet.js";
 
 
 const clientId = new OAuth2Client(process.env.CLIENT_ID);
@@ -142,6 +143,8 @@ const register = async (req, res) => {
 
       activatedAt: null,
     });
+
+    await createWalletForUser(user._id);
 
     // -------------------------
     // Create JWT
@@ -452,6 +455,8 @@ const googleLogin = async (req, res) => {
 
         activatedAt: null,
       });
+
+      await createWalletForUser(user._id);
     }
 
     // -------------------------

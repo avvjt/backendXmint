@@ -5,6 +5,9 @@ import authRoutes from "./src/routes/authRoutes.js";
 import cors from "cors";
 import profileRoutes from "./src/routes/profile.routes.js";
 import path from "path";
+import walletRoutes from "./src/routes/wallet.routes.js";
+import withdrawalRoutes from "./src/routes/withdrawal.routes.js";
+
 
 const app = express();
 app.use(cors({
@@ -25,6 +28,8 @@ app.use(
 app.use(express.json());
 app.use("/api/auth", authRoutes);
 app.use("/api", profileRoutes);
+app.use("/api", walletRoutes);
+app.use("/api", withdrawalRoutes);
 
 db();
 
