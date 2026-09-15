@@ -59,17 +59,15 @@ const tatumWebhook = async (req, res) => {
     // 2. GET ENRICHED PAYLOAD
     // --------------------------------------------------
 
-    const data = req.body?.data;
+    const data = req.body;
 
-    console.log("TATUM WEBHOOK BODY:", JSON.stringify(req.body, null, 2));
-
-    if (!data) {
-      console.log("Tatum webhook has no data object.");
-      return res.status(200).json({
-        success: true,
-        message: "Webhook received but no transaction data"
-      });
-    }
+if (!data) {
+  console.log("Tatum webhook has no transaction data.");
+  return res.status(200).json({
+    success: true,
+    message: "Webhook received but no transaction data"
+  });
+}
 
     console.log("========== VERIFIED TATUM WEBHOOK ==========");
     console.log(JSON.stringify(req.body, null, 2));
