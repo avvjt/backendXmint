@@ -149,11 +149,7 @@ const tatumWebhook = async (req, res) => {
     // 7. CONVERT TOKEN AMOUNT
     // --------------------------------------------------
 
-    const decimals = Number(
-      data.tokenMetadata?.decimals ?? 18
-    );
-
-    const amount = Number(rawValue) / 10 ** decimals;
+    const amount = Number(rawValue);
 
     if (!Number.isFinite(amount) || amount <= 0) {
       console.warn("Invalid deposit amount:", rawValue);
