@@ -61,12 +61,13 @@ const tatumWebhook = async (req, res) => {
 
     const data = req.body?.data;
 
-    if (!data) {
-      console.warn("Tatum webhook has no data object.");
+    console.log("TATUM WEBHOOK BODY:", JSON.stringify(req.body, null, 2));
 
+    if (!data) {
+      console.log("Tatum webhook has no data object.");
       return res.status(200).json({
         success: true,
-        message: "Webhook received but no transaction data",
+        message: "Webhook received but no transaction data"
       });
     }
 
@@ -114,10 +115,10 @@ const tatumWebhook = async (req, res) => {
     // --------------------------------------------------
 
     const wallet = await Wallet.findOne({
-  depositAddress: toAddress.toLowerCase(),
-  asset: "USDT",
-  network: "BEP20"
-});
+      depositAddress: toAddress.toLowerCase(),
+      asset: "USDT",
+      network: "BEP20"
+    });
 
     if (!wallet) {
       console.warn("No wallet found for deposit address:", toAddress);
