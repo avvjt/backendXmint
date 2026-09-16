@@ -4,7 +4,7 @@ import Deposit from "../models/deposit.model.js";
 
 const activateUserFromDeposit = async (userId) => {
   const minimumDeposit = Number(
-    process.env.ACTIVATION_DEPOSIT_MINIMUM || 100
+    process.env.ACTIVATION_DEPOSIT_MINIMUM || 50
   );
 
   const userObjectId = new mongoose.Types.ObjectId(userId);
