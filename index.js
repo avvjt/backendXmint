@@ -9,6 +9,7 @@ import walletRoutes from "./src/routes/wallet.routes.js";
 import withdrawalRoutes from "./src/routes/withdrawal.routes.js";
 import tatumRoutes from "./src/routes/tatum.routes.js";
 import tatumWebhookRoutes from "./src/routes/tatumWebhook.routes.js";
+import adminRoutes from "./src/routes/admin.routes.js";
 
 
 const app = express();
@@ -34,6 +35,7 @@ app.use("/api", walletRoutes);
 app.use("/api", withdrawalRoutes);
 app.use("/api", tatumRoutes);
 app.use("/api", tatumWebhookRoutes);
+app.use("/api", adminRoutes);
 
 db();
 

@@ -32,7 +32,7 @@ const withdrawalSchema = new mongoose.Schema(
     amount: {
       type: Number,
       required: true,
-      min: 0,
+      min: 0.00000001,
     },
 
     destinationAddress: {

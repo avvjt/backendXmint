@@ -5,6 +5,9 @@ import Wallet from "../models/wallet.model.js";
 import Withdrawal from "../models/withdrawal.model.js";
 import Transaction from "../models/transaction.model.js";
 
+// =====================================================
+// CREATE WITHDRAWAL
+// =====================================================
 
 const createWithdrawal = async (req, res) => {
   const session = await mongoose.startSession();
@@ -30,9 +33,14 @@ const createWithdrawal = async (req, res) => {
       });
     }
 
-    // BEP20 / EVM address validation
+    // -----------------------------
+    // 2. BEP20 / EVM address validation
+    // -----------------------------
+
+    const trimmedAddress = destinationAddress.trim();
+
     const isValidAddress =
-      /^0x[a-fA-F0-9]{40}$/.test(destinationAddress.trim());
+      /^0x[a-fA-F0-9]{40}$/.test(trimmedAddress);
 
     if (!isValidAddress) {
       return res.status(400).json({
@@ -41,7 +49,7 @@ const createWithdrawal = async (req, res) => {
     }
 
     // -----------------------------
-    // 2. Find user
+    // 3. Find user
     // -----------------------------
 
     const user = await User.findById(req.user.id);
@@ -53,7 +61,7 @@ const createWithdrawal = async (req, res) => {
     }
 
     // -----------------------------
-    // 3. Account activation check
+    // 4. Account activation check
     // -----------------------------
 
     if (user.accountStatus !== "ACTIVE") {
@@ -63,7 +71,7 @@ const createWithdrawal = async (req, res) => {
     }
 
     // -----------------------------
-    // 4. Find wallet
+    // 5. Find wallet
     // -----------------------------
 
     const wallet = await Wallet.findOne({
@@ -75,16 +83,6 @@ const createWithdrawal = async (req, res) => {
     if (!wallet) {
       return res.status(404).json({
         message: "Wallet not found",
-      });
-    }
-
-    // -----------------------------
-    // 5. Balance check
-    // -----------------------------
-
-    if (withdrawalAmount > wallet.availableBalance) {
-      return res.status(400).json({
-        message: "Insufficient available balance",
       });
     }
 
@@ -101,7 +99,17 @@ const createWithdrawal = async (req, res) => {
     }
 
     // -----------------------------
-    // 7. Atomic accounting operation
+    // 7. Balance check
+    // -----------------------------
+
+    if (withdrawalAmount > wallet.availableBalance) {
+      return res.status(400).json({
+        message: "Insufficient available balance",
+      });
+    }
+
+    // -----------------------------
+    // 8. Atomic accounting operation
     // -----------------------------
 
     let withdrawal;
@@ -114,7 +122,7 @@ const createWithdrawal = async (req, res) => {
       }).session(session);
 
       if (!lockedWallet) {
-        throw new Error("Wallet not found");
+        throw new Error("WALLET_NOT_FOUND");
       }
 
       // Re-check balance inside transaction
@@ -122,16 +130,13 @@ const createWithdrawal = async (req, res) => {
         throw new Error("INSUFFICIENT_BALANCE");
       }
 
-      // Move funds:
       // Available → Locked
-
       lockedWallet.availableBalance -= withdrawalAmount;
       lockedWallet.lockedBalance += withdrawalAmount;
 
       await lockedWallet.save({ session });
 
-      // Create withdrawal record
-
+      // Create withdrawal
       [withdrawal] = await Withdrawal.create(
         [
           {
@@ -140,15 +145,14 @@ const createWithdrawal = async (req, res) => {
             asset: "USDT",
             network: "BEP20",
             amount: withdrawalAmount,
-            destinationAddress: destinationAddress.trim(),
+            destinationAddress: trimmedAddress,
             status: "PENDING",
           },
         ],
         { session }
       );
 
-      // Create history transaction
-
+      // Create transaction history
       [transaction] = await Transaction.create(
         [
           {
@@ -194,6 +198,12 @@ const createWithdrawal = async (req, res) => {
       });
     }
 
+    if (error.message === "WALLET_NOT_FOUND") {
+      return res.status(404).json({
+        message: "Wallet not found",
+      });
+    }
+
     return res.status(500).json({
       message: "Failed to create withdrawal",
     });
@@ -201,6 +211,10 @@ const createWithdrawal = async (req, res) => {
     await session.endSession();
   }
 };
+
+// =====================================================
+// UPDATE WITHDRAWAL STATUS
+// =====================================================
 
 const updateWithdrawalStatus = async (req, res) => {
   const session = await mongoose.startSession();
@@ -215,6 +229,10 @@ const updateWithdrawalStatus = async (req, res) => {
       "FAILED",
     ];
 
+    // -----------------------------
+    // 1. Validate status
+    // -----------------------------
+
     if (!allowedStatuses.includes(status)) {
       return res.status(400).json({
         message: "Invalid withdrawal status",
@@ -224,6 +242,10 @@ const updateWithdrawalStatus = async (req, res) => {
     let withdrawal;
 
     await session.withTransaction(async () => {
+      // -----------------------------
+      // 2. Find withdrawal
+      // -----------------------------
+
       withdrawal = await Withdrawal.findById(
         withdrawalId
       ).session(session);
@@ -232,12 +254,20 @@ const updateWithdrawalStatus = async (req, res) => {
         throw new Error("WITHDRAWAL_NOT_FOUND");
       }
 
+      // -----------------------------
+      // 3. Prevent changes after final state
+      // -----------------------------
+
       if (
         withdrawal.status === "COMPLETED" ||
         withdrawal.status === "FAILED"
       ) {
         throw new Error("WITHDRAWAL_ALREADY_FINAL");
       }
+
+      // -----------------------------
+      // 4. Find wallet
+      // -----------------------------
 
       const wallet = await Wallet.findById(
         withdrawal.wallet
@@ -246,6 +276,10 @@ const updateWithdrawalStatus = async (req, res) => {
       if (!wallet) {
         throw new Error("WALLET_NOT_FOUND");
       }
+
+      // -----------------------------
+      // 5. Find related transaction
+      // -----------------------------
 
       const transaction = await Transaction.findOne({
         referenceId: withdrawal._id,
@@ -256,13 +290,17 @@ const updateWithdrawalStatus = async (req, res) => {
         throw new Error("TRANSACTION_NOT_FOUND");
       }
 
-      // --------------------------------
+      // =================================================
       // PROCESSING
-      // --------------------------------
+      // =================================================
 
       if (status === "PROCESSING") {
-        withdrawal.status = "PROCESSING";
+        // Only PENDING → PROCESSING
+        if (withdrawal.status !== "PENDING") {
+          throw new Error("INVALID_STATUS_TRANSITION");
+        }
 
+        withdrawal.status = "PROCESSING";
         transaction.status = "PROCESSING";
 
         await withdrawal.save({ session });
@@ -271,12 +309,21 @@ const updateWithdrawalStatus = async (req, res) => {
         return;
       }
 
-      // --------------------------------
+      // =================================================
       // COMPLETED
-      // --------------------------------
+      // =================================================
 
       if (status === "COMPLETED") {
-        if (!txHash) {
+        // Only PROCESSING → COMPLETED
+        if (withdrawal.status !== "PROCESSING") {
+          throw new Error("INVALID_STATUS_TRANSITION");
+        }
+
+        if (
+          !txHash ||
+          typeof txHash !== "string" ||
+          !txHash.trim()
+        ) {
           throw new Error("TX_HASH_REQUIRED");
         }
 
@@ -284,15 +331,16 @@ const updateWithdrawalStatus = async (req, res) => {
           throw new Error("LOCKED_BALANCE_ERROR");
         }
 
+        // Release locked funds
         wallet.lockedBalance -= withdrawal.amount;
 
         withdrawal.status = "COMPLETED";
-        withdrawal.txHash = txHash;
+        withdrawal.txHash = txHash.trim();
         withdrawal.processedAt = new Date();
         withdrawal.completedAt = new Date();
 
         transaction.status = "COMPLETED";
-        transaction.txHash = txHash;
+        transaction.txHash = txHash.trim();
 
         await wallet.save({ session });
         await withdrawal.save({ session });
@@ -301,11 +349,19 @@ const updateWithdrawalStatus = async (req, res) => {
         return;
       }
 
-      // --------------------------------
+      // =================================================
       // FAILED
-      // --------------------------------
+      // =================================================
 
       if (status === "FAILED") {
+        // PENDING or PROCESSING → FAILED
+        if (
+          withdrawal.status !== "PENDING" &&
+          withdrawal.status !== "PROCESSING"
+        ) {
+          throw new Error("INVALID_STATUS_TRANSITION");
+        }
+
         if (wallet.lockedBalance < withdrawal.amount) {
           throw new Error("LOCKED_BALANCE_ERROR");
         }
@@ -335,7 +391,14 @@ const updateWithdrawalStatus = async (req, res) => {
       withdrawal,
     });
   } catch (error) {
-    console.error("Update withdrawal status error:", error);
+    console.error(
+      "Update withdrawal status error:",
+      error
+    );
+
+    // -----------------------------
+    // Error handling
+    // -----------------------------
 
     if (error.message === "WITHDRAWAL_NOT_FOUND") {
       return res.status(404).json({
@@ -346,6 +409,12 @@ const updateWithdrawalStatus = async (req, res) => {
     if (error.message === "WITHDRAWAL_ALREADY_FINAL") {
       return res.status(400).json({
         message: "Withdrawal has already reached a final status",
+      });
+    }
+
+    if (error.message === "INVALID_STATUS_TRANSITION") {
+      return res.status(400).json({
+        message: "Invalid withdrawal status transition",
       });
     }
 
@@ -381,7 +450,11 @@ const updateWithdrawalStatus = async (req, res) => {
   }
 };
 
+// =====================================================
+// EXPORTS
+// =====================================================
+
 export {
   createWithdrawal,
-    updateWithdrawalStatus,
+  updateWithdrawalStatus,
 };

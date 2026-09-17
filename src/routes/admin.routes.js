@@ -1,26 +1,29 @@
 import express from "express";
 
 import {
-  createWithdrawal,
-  updateWithdrawalStatus,
-} from "../controllers/withdrawal.controller.js";
+  getAdminDeposits,
+  getAdminWithdrawals,
+} from "../controllers/admin.controller.js";
 
 import protect from "../middlewares/auth.middleware.js";
 import requireAdmin from "../middlewares/admin.middleware.js";
 
 const router = express.Router();
 
-router.post(
-  "/withdrawals",
-  protect,
-  createWithdrawal
-);
-
-router.patch(
-  "/withdrawals/:withdrawalId/status",
+// Deposits - view only
+router.get(
+  "/admin/deposits",
   protect,
   requireAdmin,
-  updateWithdrawalStatus
+  getAdminDeposits
+);
+
+// Withdrawals - view only
+router.get(
+  "/admin/withdrawals",
+  protect,
+  requireAdmin,
+  getAdminWithdrawals
 );
 
 export default router;

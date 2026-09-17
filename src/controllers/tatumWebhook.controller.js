@@ -61,13 +61,13 @@ const tatumWebhook = async (req, res) => {
 
     const data = req.body;
 
-if (!data || !data.txId) {
-  console.log("Tatum webhook has no transaction data.");
-  return res.status(200).json({
-    success: true,
-    message: "Webhook received but no transaction data",
-  });
-}
+    if (!data || !data.txId) {
+      console.log("Tatum webhook has no transaction data.");
+      return res.status(200).json({
+        success: true,
+        message: "Webhook received but no transaction data",
+      });
+    }
 
     console.log("========== VERIFIED TATUM WEBHOOK ==========");
     console.log(JSON.stringify(req.body, null, 2));
