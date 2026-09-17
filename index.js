@@ -12,6 +12,7 @@ import tatumWebhookRoutes from "./src/routes/tatumWebhook.routes.js";
 import adminRoutes from "./src/routes/admin.routes.js";
 
 
+
 const app = express();
 app.use(cors({
   origin: [
@@ -36,6 +37,7 @@ app.use("/api", withdrawalRoutes);
 app.use("/api", tatumRoutes);
 app.use("/api", tatumWebhookRoutes);
 app.use("/api", adminRoutes);
+
 
 db();
 

@@ -12,15 +12,15 @@ const TATUM_USDT_TESTNET_CONTRACT =
 
 const tatumWebhook = async (req, res) => {
   try {
-    // --------------------------------------------------
-    // 1. VERIFY TATUM HMAC
-    // --------------------------------------------------
+    // ==================================================
+    // 1. VERIFY HMAC
+    // ==================================================
 
     const receivedHash = req.headers["x-payload-hash"];
     const secret = process.env.TATUM_WEBHOOK_SECRET;
 
     if (!secret) {
-      console.error("TATUM_WEBHOOK_SECRET is not configured.");
+      console.error("TATUM_WEBHOOK_SECRET is missing");
 
       return res.status(500).json({
         success: false,
@@ -29,6 +29,8 @@ const tatumWebhook = async (req, res) => {
     }
 
     if (!receivedHash) {
+      console.warn("Tatum webhook missing x-payload-hash");
+
       return res.status(401).json({
         success: false,
         message: "Missing webhook signature",
@@ -47,7 +49,7 @@ const tatumWebhook = async (req, res) => {
       receivedBuffer.length !== calculatedBuffer.length ||
       !crypto.timingSafeEqual(receivedBuffer, calculatedBuffer)
     ) {
-      console.warn("Invalid Tatum webhook signature.");
+      console.warn("Invalid Tatum webhook signature");
 
       return res.status(401).json({
         success: false,
@@ -55,71 +57,90 @@ const tatumWebhook = async (req, res) => {
       });
     }
 
-    // --------------------------------------------------
-    // 2. GET ENRICHED PAYLOAD
-    // --------------------------------------------------
+    console.log("========== VERIFIED TATUM WEBHOOK ==========");
+    console.log(JSON.stringify(req.body, null, 2));
+    console.log("============================================");
 
-    const data = req.body;
+    // ==================================================
+    // 2. GET TATUM ENRICHED DATA
+    // ==================================================
 
-    if (!data || !data.txId) {
-      console.log("Tatum webhook has no transaction data.");
+    const data = req.body?.data;
+
+    if (!data) {
+      console.log("No data object in Tatum webhook");
+
       return res.status(200).json({
         success: true,
-        message: "Webhook received but no transaction data",
+        message: "Webhook received",
       });
     }
 
-    console.log("========== VERIFIED TATUM WEBHOOK ==========");
-    console.log(JSON.stringify(req.body, null, 2));
-    console.log("=============================================");
+    // ==================================================
+    // 3. EXTRACT DATA
+    // ==================================================
 
-    // --------------------------------------------------
-    // 3. EXTRACT TRANSACTION DATA
-    // --------------------------------------------------
-
-    const txHash = data.txId.toLowerCase();
+    const txHash = data.txId;
     const fromAddress = data.from;
     const toAddress = data.to;
     const contractAddress = data.contractAddress;
     const rawValue = data.value;
 
-    if (!txHash || !toAddress || !contractAddress || rawValue === undefined) {
-      console.warn("Incomplete Tatum transaction payload.");
+    if (
+      !txHash ||
+      !toAddress ||
+      !contractAddress ||
+      rawValue === undefined
+    ) {
+      console.warn("Incomplete Tatum transaction payload");
 
       return res.status(200).json({
         success: true,
-        message: "Webhook received but transaction data is incomplete",
+        message: "Incomplete transaction data",
       });
     }
 
-    // --------------------------------------------------
-    // 4. VERIFY CONTRACT
-    // --------------------------------------------------
+    // ==================================================
+    // 4. VERIFY TOKEN CONTRACT
+    // ==================================================
 
     if (
       contractAddress.toLowerCase() !==
       TATUM_USDT_TESTNET_CONTRACT.toLowerCase()
     ) {
-      console.warn("Ignoring unknown token contract:", contractAddress);
+      console.warn(
+        "Ignoring unsupported token:",
+        contractAddress
+      );
 
       return res.status(200).json({
         success: true,
-        message: "Token contract not supported",
+        message: "Unsupported token",
       });
     }
 
-    // --------------------------------------------------
+    // ==================================================
     // 5. FIND USER WALLET
-    // --------------------------------------------------
+    // ==================================================
+
+    // IMPORTANT:
+    // Ethereum/BSC addresses are case-insensitive.
+    // Do NOT require exact lowercase matching.
 
     const wallet = await Wallet.findOne({
-      depositAddress: toAddress.toLowerCase(),
+      depositAddress: {
+        $regex: `^${toAddress}$`,
+        $options: "i",
+      },
       asset: "USDT",
-      network: "BEP20"
+      network: "BEP20",
     });
 
     if (!wallet) {
-      console.warn("No wallet found for deposit address:", toAddress);
+      console.warn(
+        "No wallet found for deposit address:",
+        toAddress
+      );
 
       return res.status(200).json({
         success: true,
@@ -127,12 +148,12 @@ const tatumWebhook = async (req, res) => {
       });
     }
 
-    // --------------------------------------------------
-    // 6. CHECK DUPLICATE TRANSACTION
-    // --------------------------------------------------
+    // ==================================================
+    // 6. DUPLICATE CHECK
+    // ==================================================
 
     const existingDeposit = await Deposit.findOne({
-      txHash,
+      txHash: txHash,
     });
 
     if (existingDeposit) {
@@ -144,14 +165,23 @@ const tatumWebhook = async (req, res) => {
       });
     }
 
-    // --------------------------------------------------
+    // ==================================================
     // 7. CONVERT TOKEN AMOUNT
-    // --------------------------------------------------
+    // ==================================================
 
-    const amount = Number(rawValue);
+    const decimals = Number(
+      data?.tokenMetadata?.decimals ?? 18
+    );
+
+    const amount =
+      Number(rawValue) / Math.pow(10, decimals);
 
     if (!Number.isFinite(amount) || amount <= 0) {
-      console.warn("Invalid deposit amount:", rawValue);
+      console.warn("Invalid token amount:", {
+        rawValue,
+        decimals,
+        amount,
+      });
 
       return res.status(200).json({
         success: true,
@@ -159,9 +189,18 @@ const tatumWebhook = async (req, res) => {
       });
     }
 
-    // --------------------------------------------------
-    // 8. ATOMIC DATABASE TRANSACTION
-    // --------------------------------------------------
+    console.log("USDT deposit detected:", {
+      txHash,
+      fromAddress,
+      toAddress,
+      rawValue,
+      decimals,
+      amount,
+    });
+
+    // ==================================================
+    // 8. DATABASE TRANSACTION
+    // ==================================================
 
     const session = await mongoose.startSession();
 
@@ -217,21 +256,21 @@ const tatumWebhook = async (req, res) => {
 
       await session.commitTransaction();
 
-      console.log("Deposit successfully credited:", {
-        user: wallet.user,
-        wallet: wallet._id,
-        amount,
-        txHash,
-        fromAddress,
-        toAddress,
-      });
+      console.log("=================================");
+      console.log("DEPOSIT CREDITED SUCCESSFULLY");
+      console.log("User:", wallet.user);
+      console.log("Amount:", amount, "USDT");
+      console.log("TX:", txHash);
+      console.log("=================================");
     } catch (transactionError) {
       await session.abortTransaction();
 
-      // Another webhook could have processed the same txHash
-      // at almost exactly the same time.
+      // Unique txHash protection
       if (transactionError?.code === 11000) {
-        console.log("Duplicate transaction prevented:", txHash);
+        console.log(
+          "Duplicate transaction prevented:",
+          txHash
+        );
 
         return res.status(200).json({
           success: true,
@@ -244,26 +283,40 @@ const tatumWebhook = async (req, res) => {
       await session.endSession();
     }
 
-    // --------------------------------------------------
-    // 9. CHECK ACCOUNT ACTIVATION
-    // --------------------------------------------------
+    // ==================================================
+    // 9. AUTOMATIC ACCOUNT ACTIVATION
+    // ==================================================
 
-    const activation = await activateUserFromDeposit(wallet.user);
+    const activation = await activateUserFromDeposit(
+      wallet.user
+    );
 
-    console.log("Deposit activation result:", activation);
+    console.log(
+      "Activation result:",
+      activation
+    );
+
+    // ==================================================
+    // 10. SUCCESS
+    // ==================================================
 
     return res.status(200).json({
       success: true,
       message: "Deposit processed successfully",
+
       deposit: {
         txHash,
         amount,
         depositAddress: wallet.depositAddress,
       },
+
       activation,
     });
   } catch (error) {
-    console.error("Tatum webhook processing error:", error);
+    console.error(
+      "Tatum webhook processing error:",
+      error
+    );
 
     return res.status(500).json({
       success: false,
