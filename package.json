@@ -13,6 +13,10 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@scure/bip32": "^2.4.0",
+    "@scure/bip39": "^2.4.0",
+    "@tatumio/evm-wallet-provider": "^1.0.12",
+    "@tatumio/tatum": "^4.2.60",
     "bcrypt": "^6.0.0",
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.6",
@@ -23,7 +27,8 @@
     "jsonwebtoken": "^9.0.3",
     "moongose": "^1.0.0",
     "multer": "^2.3.0",
-    "nodemailer": "^9.0.3"
+    "nodemailer": "^9.0.3",
+    "viem": "^2.56.7"
   },
   "devDependencies": {
     "nodemon": "^3.1.14"

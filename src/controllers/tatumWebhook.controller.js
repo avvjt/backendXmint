@@ -6,9 +6,9 @@ import Deposit from "../models/deposit.model.js";
 import Transaction from "../models/transaction.model.js";
 import activateUserFromDeposit from "../utils/activateUserFromDeposit.js";
 
-const TATUM_USDT_TESTNET_CONTRACT =
-  process.env.BSC_USDT_TESTNET_CONTRACT ||
-  "0x337610d27c682E347C9cD60BD4b3b107C9d34dDd";
+const TATUM_USDT_MAINNET_CONTRACT =
+  process.env.BSC_USDT_MAINNET_CONTRACT ||
+  "0x55d398326f99059ff775485246999027b3197955";
 
 const tatumWebhook = async (req, res) => {
   try {
@@ -105,19 +105,14 @@ const tatumWebhook = async (req, res) => {
     // ==================================================
 
     if (
-      contractAddress.toLowerCase() !==
-      TATUM_USDT_TESTNET_CONTRACT.toLowerCase()
-    ) {
-      console.warn(
-        "Ignoring unsupported token:",
-        contractAddress
-      );
-
-      return res.status(200).json({
-        success: true,
-        message: "Unsupported token",
-      });
-    }
+  contractAddress.toLowerCase() !==
+  TATUM_USDT_MAINNET_CONTRACT.toLowerCase()
+) {
+  return res.status(200).json({
+    success: true,
+    message: "Unsupported token",
+  });
+}
 
     // ==================================================
     // 5. FIND USER WALLET
