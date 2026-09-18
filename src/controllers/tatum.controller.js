@@ -1,12 +1,3 @@
-import {
-  deriveSweepPrivateKey,
-  checkSweepWallet,
-  compareTatumWalletAddress,
-  compareTatumXpub,
-  getXpubFromMnemonic,
-} from "../services/sweep.service.js";
-
-
 const testTatumConnection = async (req, res) => {
   try {
     const response = await fetch(
@@ -54,10 +45,19 @@ const generateBscAddress = async (req, res) => {
     const { index } = req.body;
 
     const xpub = process.env.TATUM_BSC_XPUB;
+    const apiKey = process.env.TATUM_API_KEY;
 
     if (!xpub || index === undefined) {
       return res.status(400).json({
+        success: false,
         message: "Wallet configuration is missing",
+      });
+    }
+
+    if (!apiKey) {
+      return res.status(500).json({
+        success: false,
+        message: "Tatum API key is not configured",
       });
     }
 
@@ -65,6 +65,7 @@ const generateBscAddress = async (req, res) => {
 
     if (!Number.isInteger(numericIndex) || numericIndex < 0) {
       return res.status(400).json({
+        success: false,
         message: "Index must be a non-negative integer",
       });
     }
@@ -76,20 +77,19 @@ const generateBscAddress = async (req, res) => {
       {
         method: "GET",
         headers: {
-          "x-api-key": process.env.TATUM_API_KEY,
+          "x-api-key": apiKey,
         },
       }
     );
 
     const data = await response.json();
 
-    if (!response.ok) {
+    if (!response.ok || !data.address) {
       console.error("Tatum address error:", data);
 
-      return res.status(response.status).json({
+      return res.status(response.status || 500).json({
         success: false,
         message: "Failed to generate BSC address",
-        error: data,
       });
     }
 
@@ -109,260 +109,7 @@ const generateBscAddress = async (req, res) => {
 };
 
 
-const generateBscWallet = async (req, res) => {
-  try {
-    const response = await fetch(
-      "https://api.tatum.io/v3/bsc/wallet",
-      {
-        method: "GET",
-        headers: {
-          "x-api-key": process.env.TATUM_API_KEY,
-        },
-      }
-    );
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      console.error(
-        "Tatum wallet generation failed:",
-        data
-      );
-
-      return res.status(response.status).json({
-        success: false,
-        message: "Failed to generate BSC wallet",
-        error: data,
-      });
-    }
-
-    console.log(
-      "========== NEW BSC WALLET =========="
-    );
-    console.log("Wallet generated successfully.");
-    console.log(
-      "===================================="
-    );
-
-    return res.status(200).json({
-      success: true,
-      wallet: data,
-    });
-  } catch (error) {
-    console.error(
-      "BSC wallet generation error:",
-      error
-    );
-
-    return res.status(500).json({
-      success: false,
-      message:
-        "Server error while generating BSC wallet",
-    });
-  }
-};
-
-
-const testSweepAddress = async (req, res) => {
-  try {
-    const index = Number(
-      req.query.index ?? 0
-    );
-
-    if (
-      !Number.isInteger(index) ||
-      index < 0
-    ) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid index",
-      });
-    }
-
-    await deriveSweepPrivateKey(index);
-
-    const xpub =
-      process.env.TATUM_BSC_XPUB;
-
-    const apiKey =
-      process.env.TATUM_API_KEY;
-
-    const response = await fetch(
-      `https://api.tatum.io/v3/bsc/address/${encodeURIComponent(
-        xpub
-      )}/${index}`,
-      {
-        method: "GET",
-        headers: {
-          "x-api-key": apiKey,
-        },
-      }
-    );
-
-    const data =
-      await response.json();
-
-    if (
-      !response.ok ||
-      !data.address
-    ) {
-      throw new Error(
-        "Failed to get BSC address"
-      );
-    }
-
-    return res.status(200).json({
-      success: true,
-      index,
-      address: data.address,
-    });
-  } catch (error) {
-    console.error(
-      "Sweep address test failed:",
-      error
-    );
-
-    return res.status(500).json({
-      success: false,
-      message:
-        "Failed to derive sweep address",
-    });
-  }
-};
-
-
-const checkSweepWalletBalance = async (
-  req,
-  res
-) => {
-  try {
-    const index = Number(
-      req.query.index ?? 0
-    );
-
-    if (
-      !Number.isInteger(index) ||
-      index < 0
-    ) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid wallet index",
-      });
-    }
-
-    const result =
-      await checkSweepWallet(index);
-
-    return res.status(200).json(result);
-  } catch (error) {
-    console.error(
-      "Check sweep wallet error:",
-      error.message
-    );
-
-    return res.status(500).json({
-      success: false,
-      message: error.message,
-    });
-  }
-};
-
-
-const compareTatumWallet = async (
-  req,
-  res
-) => {
-  try {
-    const index = Number(
-      req.query.index ?? 0
-    );
-
-    if (
-      !Number.isInteger(index) ||
-      index < 0
-    ) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid index",
-      });
-    }
-
-    const result =
-      await compareTatumWalletAddress(
-        index
-      );
-
-    return res.status(200).json(result);
-  } catch (error) {
-    console.error(
-      "Compare Tatum wallet error:",
-      error.message
-    );
-
-    return res.status(500).json({
-      success: false,
-      message: error.message,
-    });
-  }
-};
-
-
-const verifyTatumXpub = async (
-  req,
-  res
-) => {
-  try {
-    const result =
-      await compareTatumXpub();
-
-    return res.status(200).json(result);
-  } catch (error) {
-    console.error(
-      "Verify Tatum XPUB error:",
-      error.message
-    );
-
-    return res.status(500).json({
-      success: false,
-      message: error.message,
-    });
-  }
-};
-
-
-const getMatchingXpub = async (req, res) => {
-  try {
-    const xpub = await getXpubFromMnemonic();
-
-    console.log("\n========== MATCHING XPUB ==========");
-    console.log(xpub);
-    console.log("===================================\n");
-
-    return res.json({
-      success: true,
-      message:
-        "Matching XPUB printed in backend terminal",
-    });
-  } catch (error) {
-    console.error(
-      "Get matching XPUB error:",
-      error.message
-    );
-
-    return res.status(500).json({
-      success: false,
-      message: error.message,
-    });
-  }
-};
-
 export {
   testTatumConnection,
   generateBscAddress,
-  generateBscWallet,
-  getMatchingXpub,
-  checkSweepWalletBalance,
-  testSweepAddress,
-  compareTatumWallet,
-  verifyTatumXpub,
 };

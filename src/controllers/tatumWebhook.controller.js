@@ -5,6 +5,7 @@ import Wallet from "../models/wallet.model.js";
 import Deposit from "../models/deposit.model.js";
 import Transaction from "../models/transaction.model.js";
 import activateUserFromDeposit from "../utils/activateUserFromDeposit.js";
+import { sweepUsdt } from "../services/sweep.service.js";
 
 const TATUM_USDT_MAINNET_CONTRACT =
   process.env.BSC_USDT_MAINNET_CONTRACT ||
@@ -243,7 +244,7 @@ const tatumWebhook = async (req, res) => {
             status: "COMPLETED",
             referenceId: deposit[0]._id,
             txHash,
-            description: "BSC Testnet USDT deposit",
+            description: "BSC Mainnet USDT deposit",
           },
         ],
         { session }
@@ -291,22 +292,53 @@ const tatumWebhook = async (req, res) => {
       activation
     );
 
+
+    // ==================================================
+// 10. AUTOMATIC USDT SWEEP
+// ==================================================
+
+let sweep = null;
+
+try {
+  sweep = await sweepUsdt({
+    index: wallet.addressIndex,
+    amount,
+  });
+
+  console.log(
+    "USDT sweep completed:",
+    sweep.txHash
+  );
+} catch (sweepError) {
+  console.error(
+    "USDT sweep failed:",
+    sweepError.message
+  );
+
+  sweep = {
+    success: false,
+    message: sweepError.message,
+  };
+}
+
     // ==================================================
     // 10. SUCCESS
     // ==================================================
 
     return res.status(200).json({
-      success: true,
-      message: "Deposit processed successfully",
+  success: true,
+  message: "Deposit processed successfully",
 
-      deposit: {
-        txHash,
-        amount,
-        depositAddress: wallet.depositAddress,
-      },
+  deposit: {
+    txHash,
+    amount,
+    depositAddress: wallet.depositAddress,
+  },
 
-      activation,
-    });
+  activation,
+
+  sweep,
+});
   } catch (error) {
     console.error(
       "Tatum webhook processing error:",
