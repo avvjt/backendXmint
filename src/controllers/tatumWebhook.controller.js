@@ -6,6 +6,12 @@ import Deposit from "../models/deposit.model.js";
 import Transaction from "../models/transaction.model.js";
 import activateUserFromDeposit from "../utils/activateUserFromDeposit.js";
 import { sweepUsdt } from "../services/sweep.service.js";
+import { processReferralBonus } from "../services/teamIncome.service.js";
+import UserPackage from "../models/userPackage.model.js";
+import { getPackageByBalance } from "../config/packageConfig.js";
+import { syncTeamLevel } from "../services/team.service.js";
+
+
 
 const TATUM_USDT_MAINNET_CONTRACT =
   process.env.BSC_USDT_MAINNET_CONTRACT ||
@@ -106,14 +112,14 @@ const tatumWebhook = async (req, res) => {
     // ==================================================
 
     if (
-  contractAddress.toLowerCase() !==
-  TATUM_USDT_MAINNET_CONTRACT.toLowerCase()
-) {
-  return res.status(200).json({
-    success: true,
-    message: "Unsupported token",
-  });
-}
+      contractAddress.toLowerCase() !==
+      TATUM_USDT_MAINNET_CONTRACT.toLowerCase()
+    ) {
+      return res.status(200).json({
+        success: true,
+        message: "Unsupported token",
+      });
+    }
 
     // ==================================================
     // 5. FIND USER WALLET
@@ -200,6 +206,9 @@ const tatumWebhook = async (req, res) => {
 
     const session = await mongoose.startSession();
 
+    let createdDepositId = null;
+    let referralBonus = null;
+
     try {
       session.startTransaction();
 
@@ -222,6 +231,8 @@ const tatumWebhook = async (req, res) => {
         { session }
       );
 
+      createdDepositId = deposit[0]._id;
+
       await Wallet.updateOne(
         { _id: wallet._id },
         {
@@ -231,6 +242,75 @@ const tatumWebhook = async (req, res) => {
         },
         { session }
       );
+
+      // ==================================================
+      // UPDATE USER PACKAGE FROM NEW DEPOSIT
+      // ==================================================
+
+      const updatedWallet = await Wallet.findById(
+        wallet._id
+      ).session(session);
+
+      const packageInfo = getPackageByBalance(
+        updatedWallet.availableBalance
+      );
+
+      if (packageInfo) {
+        let userPackage = await UserPackage.findOne({
+          user: wallet.user,
+        }).session(session);
+
+        if (!userPackage) {
+          userPackage = new UserPackage({
+            user: wallet.user,
+          });
+        }
+
+        const previousPackageKey =
+          userPackage.packageKey;
+
+        const previousBaseAmount =
+          Number(userPackage.baseAmount || 0);
+
+        /*
+         * First eligible deposit:
+         * establish the initial earning base.
+         *
+         * New deposit that upgrades the package:
+         * update the base to the new qualifying balance.
+         *
+         * Deposit that does not change the package:
+         * keep the existing base.
+         */
+        if (
+          previousBaseAmount <= 0 ||
+          !previousPackageKey ||
+          packageInfo.key !== previousPackageKey
+        ) {
+          userPackage.baseAmount =
+            updatedWallet.availableBalance;
+        }
+
+        userPackage.packageKey =
+          packageInfo.key;
+
+        userPackage.packageName =
+          packageInfo.name;
+
+        userPackage.dailyRate =
+          packageInfo.dailyRate;
+
+        userPackage.isActive = true;
+
+        await userPackage.save({ session });
+
+        console.log("User package updated:", {
+          user: wallet.user,
+          previousPackage: previousPackageKey,
+          newPackage: packageInfo.key,
+          baseAmount: userPackage.baseAmount,
+        });
+      }
 
       await Transaction.create(
         [
@@ -250,6 +330,23 @@ const tatumWebhook = async (req, res) => {
         { session }
       );
 
+      // ================================================
+      // REFERRAL BONUS
+      // ================================================
+
+      referralBonus = await processReferralBonus({
+        referredUserId: wallet.user,
+        depositId: deposit[0]._id,
+        depositAmount: amount,
+        session,
+      });
+
+      await syncTeamLevel(
+  wallet.user,
+  session
+);
+
+      // NOW COMMIT EVERYTHING
       await session.commitTransaction();
 
       console.log("=================================");
@@ -279,8 +376,11 @@ const tatumWebhook = async (req, res) => {
       await session.endSession();
     }
 
+
+
+
     // ==================================================
-    // 9. AUTOMATIC ACCOUNT ACTIVATION
+    // 10. AUTOMATIC ACCOUNT ACTIVATION
     // ==================================================
 
     const activation = await activateUserFromDeposit(
@@ -292,53 +392,52 @@ const tatumWebhook = async (req, res) => {
       activation
     );
 
-
     // ==================================================
-// 10. AUTOMATIC USDT SWEEP
-// ==================================================
+    // 11. AUTOMATIC USDT SWEEP
+    // ==================================================
 
-let sweep = null;
+    let sweep = null;
 
-try {
-  sweep = await sweepUsdt({
-    index: wallet.addressIndex,
-    amount,
-  });
+    try {
+      sweep = await sweepUsdt({
+        index: wallet.addressIndex,
+        amount,
+      });
 
-  console.log(
-    "USDT sweep completed:",
-    sweep.txHash
-  );
-} catch (sweepError) {
-  console.error(
-    "USDT sweep failed:",
-    sweepError.message
-  );
+      console.log(
+        "USDT sweep completed:",
+        sweep.txHash
+      );
+    } catch (sweepError) {
+      console.error(
+        "USDT sweep failed:",
+        sweepError.message
+      );
 
-  sweep = {
-    success: false,
-    message: sweepError.message,
-  };
-}
+      sweep = {
+        success: false,
+        message: sweepError.message,
+      };
+    }
 
     // ==================================================
     // 10. SUCCESS
     // ==================================================
 
     return res.status(200).json({
-  success: true,
-  message: "Deposit processed successfully",
+      success: true,
+      message: "Deposit processed successfully",
 
-  deposit: {
-    txHash,
-    amount,
-    depositAddress: wallet.depositAddress,
-  },
+      deposit: {
+        txHash,
+        amount,
+        depositAddress: wallet.depositAddress,
+      },
 
-  activation,
-
-  sweep,
-});
+      activation,
+      referralBonus,
+      sweep,
+    });
   } catch (error) {
     console.error(
       "Tatum webhook processing error:",

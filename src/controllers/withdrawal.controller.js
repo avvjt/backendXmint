@@ -4,6 +4,11 @@ import User from "../models/user.model.js";
 import Wallet from "../models/wallet.model.js";
 import Withdrawal from "../models/withdrawal.model.js";
 import Transaction from "../models/transaction.model.js";
+import UserPackage from "../models/userPackage.model.js";
+
+import {
+  getPackageByBalance,
+} from "../config/packageConfig.js";
 
 // =====================================================
 // CREATE WITHDRAWAL
@@ -27,7 +32,10 @@ const createWithdrawal = async (req, res) => {
 
     const withdrawalAmount = Number(amount);
 
-    if (!Number.isFinite(withdrawalAmount) || withdrawalAmount <= 0) {
+    if (
+      !Number.isFinite(withdrawalAmount) ||
+      withdrawalAmount <= 0
+    ) {
       return res.status(400).json({
         message: "Invalid withdrawal amount",
       });
@@ -126,17 +134,62 @@ const createWithdrawal = async (req, res) => {
       }
 
       // Re-check balance inside transaction
-      if (withdrawalAmount > lockedWallet.availableBalance) {
+      if (
+        withdrawalAmount >
+        lockedWallet.availableBalance
+      ) {
         throw new Error("INSUFFICIENT_BALANCE");
       }
 
       // Available → Locked
-      lockedWallet.availableBalance -= withdrawalAmount;
-      lockedWallet.lockedBalance += withdrawalAmount;
+      lockedWallet.availableBalance -=
+        withdrawalAmount;
+
+      lockedWallet.lockedBalance +=
+        withdrawalAmount;
 
       await lockedWallet.save({ session });
 
-      // Create withdrawal
+      // ==============================================
+      // UPDATE USER PACKAGE AFTER WITHDRAWAL
+      // ==============================================
+
+      const packageInfo =
+        getPackageByBalance(
+          lockedWallet.availableBalance
+        );
+
+      let userPackage =
+        await UserPackage.findOne({
+          user: user._id,
+        }).session(session);
+
+      if (userPackage) {
+        if (packageInfo) {
+          // Balance still qualifies for a package.
+          userPackage.packageKey =
+            packageInfo.key;
+
+          userPackage.packageName =
+            packageInfo.name;
+
+          userPackage.dailyRate =
+            packageInfo.dailyRate;
+
+          userPackage.isActive = true;
+        } else {
+          // Balance is below the minimum
+          // package requirement.
+          userPackage.isActive = false;
+        }
+
+        await userPackage.save({ session });
+      }
+
+      // ==============================================
+      // CREATE WITHDRAWAL
+      // ==============================================
+
       [withdrawal] = await Withdrawal.create(
         [
           {
@@ -152,7 +205,10 @@ const createWithdrawal = async (req, res) => {
         { session }
       );
 
-      // Create transaction history
+      // ==============================================
+      // CREATE TRANSACTION HISTORY
+      // ==============================================
+
       [transaction] = await Transaction.create(
         [
           {
@@ -179,7 +235,8 @@ const createWithdrawal = async (req, res) => {
         amount: withdrawal.amount,
         asset: withdrawal.asset,
         network: withdrawal.network,
-        destinationAddress: withdrawal.destinationAddress,
+        destinationAddress:
+          withdrawal.destinationAddress,
         status: withdrawal.status,
       },
       transaction: {
@@ -190,7 +247,10 @@ const createWithdrawal = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Create withdrawal error:", error);
+    console.error(
+      "Create withdrawal error:",
+      error
+    );
 
     if (error.message === "INSUFFICIENT_BALANCE") {
       return res.status(400).json({
@@ -220,8 +280,15 @@ const updateWithdrawalStatus = async (req, res) => {
   const session = await mongoose.startSession();
 
   try {
-    const { withdrawalId } = req.params;
-    const { status, txHash, failureReason } = req.body;
+    const {
+      withdrawalId,
+    } = req.params;
+
+    const {
+      status,
+      txHash,
+      failureReason,
+    } = req.body;
 
     const allowedStatuses = [
       "PROCESSING",
@@ -246,12 +313,15 @@ const updateWithdrawalStatus = async (req, res) => {
       // 2. Find withdrawal
       // -----------------------------
 
-      withdrawal = await Withdrawal.findById(
-        withdrawalId
-      ).session(session);
+      withdrawal =
+        await Withdrawal.findById(
+          withdrawalId
+        ).session(session);
 
       if (!withdrawal) {
-        throw new Error("WITHDRAWAL_NOT_FOUND");
+        throw new Error(
+          "WITHDRAWAL_NOT_FOUND"
+        );
       }
 
       // -----------------------------
@@ -262,32 +332,41 @@ const updateWithdrawalStatus = async (req, res) => {
         withdrawal.status === "COMPLETED" ||
         withdrawal.status === "FAILED"
       ) {
-        throw new Error("WITHDRAWAL_ALREADY_FINAL");
+        throw new Error(
+          "WITHDRAWAL_ALREADY_FINAL"
+        );
       }
 
       // -----------------------------
       // 4. Find wallet
       // -----------------------------
 
-      const wallet = await Wallet.findById(
-        withdrawal.wallet
-      ).session(session);
+      const wallet =
+        await Wallet.findById(
+          withdrawal.wallet
+        ).session(session);
 
       if (!wallet) {
-        throw new Error("WALLET_NOT_FOUND");
+        throw new Error(
+          "WALLET_NOT_FOUND"
+        );
       }
 
       // -----------------------------
       // 5. Find related transaction
       // -----------------------------
 
-      const transaction = await Transaction.findOne({
-        referenceId: withdrawal._id,
-        type: "WITHDRAWAL",
-      }).session(session);
+      const transaction =
+        await Transaction.findOne({
+          referenceId:
+            withdrawal._id,
+          type: "WITHDRAWAL",
+        }).session(session);
 
       if (!transaction) {
-        throw new Error("TRANSACTION_NOT_FOUND");
+        throw new Error(
+          "TRANSACTION_NOT_FOUND"
+        );
       }
 
       // =================================================
@@ -296,15 +375,28 @@ const updateWithdrawalStatus = async (req, res) => {
 
       if (status === "PROCESSING") {
         // Only PENDING → PROCESSING
-        if (withdrawal.status !== "PENDING") {
-          throw new Error("INVALID_STATUS_TRANSITION");
+        if (
+          withdrawal.status !==
+          "PENDING"
+        ) {
+          throw new Error(
+            "INVALID_STATUS_TRANSITION"
+          );
         }
 
-        withdrawal.status = "PROCESSING";
-        transaction.status = "PROCESSING";
+        withdrawal.status =
+          "PROCESSING";
 
-        await withdrawal.save({ session });
-        await transaction.save({ session });
+        transaction.status =
+          "PROCESSING";
+
+        await withdrawal.save({
+          session,
+        });
+
+        await transaction.save({
+          session,
+        });
 
         return;
       }
@@ -315,8 +407,13 @@ const updateWithdrawalStatus = async (req, res) => {
 
       if (status === "COMPLETED") {
         // Only PROCESSING → COMPLETED
-        if (withdrawal.status !== "PROCESSING") {
-          throw new Error("INVALID_STATUS_TRANSITION");
+        if (
+          withdrawal.status !==
+          "PROCESSING"
+        ) {
+          throw new Error(
+            "INVALID_STATUS_TRANSITION"
+          );
         }
 
         if (
@@ -324,27 +421,53 @@ const updateWithdrawalStatus = async (req, res) => {
           typeof txHash !== "string" ||
           !txHash.trim()
         ) {
-          throw new Error("TX_HASH_REQUIRED");
+          throw new Error(
+            "TX_HASH_REQUIRED"
+          );
         }
 
-        if (wallet.lockedBalance < withdrawal.amount) {
-          throw new Error("LOCKED_BALANCE_ERROR");
+        if (
+          wallet.lockedBalance <
+          withdrawal.amount
+        ) {
+          throw new Error(
+            "LOCKED_BALANCE_ERROR"
+          );
         }
 
         // Release locked funds
-        wallet.lockedBalance -= withdrawal.amount;
+        wallet.lockedBalance -=
+          withdrawal.amount;
 
-        withdrawal.status = "COMPLETED";
-        withdrawal.txHash = txHash.trim();
-        withdrawal.processedAt = new Date();
-        withdrawal.completedAt = new Date();
+        withdrawal.status =
+          "COMPLETED";
 
-        transaction.status = "COMPLETED";
-        transaction.txHash = txHash.trim();
+        withdrawal.txHash =
+          txHash.trim();
 
-        await wallet.save({ session });
-        await withdrawal.save({ session });
-        await transaction.save({ session });
+        withdrawal.processedAt =
+          new Date();
+
+        withdrawal.completedAt =
+          new Date();
+
+        transaction.status =
+          "COMPLETED";
+
+        transaction.txHash =
+          txHash.trim();
+
+        await wallet.save({
+          session,
+        });
+
+        await withdrawal.save({
+          session,
+        });
+
+        await transaction.save({
+          session,
+        });
 
         return;
       }
@@ -356,32 +479,96 @@ const updateWithdrawalStatus = async (req, res) => {
       if (status === "FAILED") {
         // PENDING or PROCESSING → FAILED
         if (
-          withdrawal.status !== "PENDING" &&
-          withdrawal.status !== "PROCESSING"
+          withdrawal.status !==
+            "PENDING" &&
+          withdrawal.status !==
+            "PROCESSING"
         ) {
-          throw new Error("INVALID_STATUS_TRANSITION");
+          throw new Error(
+            "INVALID_STATUS_TRANSITION"
+          );
         }
 
-        if (wallet.lockedBalance < withdrawal.amount) {
-          throw new Error("LOCKED_BALANCE_ERROR");
+        if (
+          wallet.lockedBalance <
+          withdrawal.amount
+        ) {
+          throw new Error(
+            "LOCKED_BALANCE_ERROR"
+          );
         }
 
         // Return locked funds
-        wallet.lockedBalance -= withdrawal.amount;
-        wallet.availableBalance += withdrawal.amount;
+        wallet.lockedBalance -=
+          withdrawal.amount;
 
-        withdrawal.status = "FAILED";
+        wallet.availableBalance +=
+          withdrawal.amount;
+
+        // ==============================================
+        // RESTORE PACKAGE STATUS
+        // ==============================================
+
+        const packageInfo =
+          getPackageByBalance(
+            wallet.availableBalance
+          );
+
+        const userPackage =
+          await UserPackage.findOne({
+            user: user._id,
+          }).session(session);
+
+        if (userPackage) {
+          if (packageInfo) {
+            userPackage.packageKey =
+              packageInfo.key;
+
+            userPackage.packageName =
+              packageInfo.name;
+
+            userPackage.dailyRate =
+              packageInfo.dailyRate;
+
+            userPackage.isActive = true;
+          } else {
+            userPackage.isActive =
+              false;
+          }
+
+          await userPackage.save({
+            session,
+          });
+        }
+
+        withdrawal.status =
+          "FAILED";
+
         withdrawal.failureReason =
-          failureReason || "Withdrawal failed";
-        withdrawal.processedAt = new Date();
+          failureReason ||
+          "Withdrawal failed";
 
-        transaction.status = "FAILED";
+        withdrawal.processedAt =
+          new Date();
+
+        transaction.status =
+          "FAILED";
+
         transaction.description =
-          failureReason || "USDT withdrawal failed";
+          failureReason ||
+          "USDT withdrawal failed";
 
-        await wallet.save({ session });
-        await withdrawal.save({ session });
-        await transaction.save({ session });
+        await wallet.save({
+          session,
+        });
+
+        await withdrawal.save({
+          session,
+        });
+
+        await transaction.save({
+          session,
+        });
       }
     });
 
@@ -400,50 +587,77 @@ const updateWithdrawalStatus = async (req, res) => {
     // Error handling
     // -----------------------------
 
-    if (error.message === "WITHDRAWAL_NOT_FOUND") {
+    if (
+      error.message ===
+      "WITHDRAWAL_NOT_FOUND"
+    ) {
       return res.status(404).json({
         message: "Withdrawal not found",
       });
     }
 
-    if (error.message === "WITHDRAWAL_ALREADY_FINAL") {
+    if (
+      error.message ===
+      "WITHDRAWAL_ALREADY_FINAL"
+    ) {
       return res.status(400).json({
-        message: "Withdrawal has already reached a final status",
+        message:
+          "Withdrawal has already reached a final status",
       });
     }
 
-    if (error.message === "INVALID_STATUS_TRANSITION") {
+    if (
+      error.message ===
+      "INVALID_STATUS_TRANSITION"
+    ) {
       return res.status(400).json({
-        message: "Invalid withdrawal status transition",
+        message:
+          "Invalid withdrawal status transition",
       });
     }
 
-    if (error.message === "WALLET_NOT_FOUND") {
+    if (
+      error.message ===
+      "WALLET_NOT_FOUND"
+    ) {
       return res.status(404).json({
         message: "Wallet not found",
       });
     }
 
-    if (error.message === "TRANSACTION_NOT_FOUND") {
+    if (
+      error.message ===
+      "TRANSACTION_NOT_FOUND"
+    ) {
       return res.status(404).json({
-        message: "Related transaction not found",
+        message:
+          "Related transaction not found",
       });
     }
 
-    if (error.message === "TX_HASH_REQUIRED") {
+    if (
+      error.message ===
+      "TX_HASH_REQUIRED"
+    ) {
       return res.status(400).json({
-        message: "Transaction hash is required",
+        message:
+          "Transaction hash is required",
       });
     }
 
-    if (error.message === "LOCKED_BALANCE_ERROR") {
+    if (
+      error.message ===
+      "LOCKED_BALANCE_ERROR"
+    ) {
       return res.status(400).json({
-        message: "Locked balance is inconsistent",
+        message:
+          "Locked balance is inconsistent",
       });
     }
 
     return res.status(500).json({
-      message: "Failed to update withdrawal",
+      message:
+        "Failed to update withdrawal",
     });
   } finally {
     await session.endSession();

@@ -10,6 +10,9 @@ import withdrawalRoutes from "./src/routes/withdrawal.routes.js";
 import tatumRoutes from "./src/routes/tatum.routes.js";
 import tatumWebhookRoutes from "./src/routes/tatumWebhook.routes.js";
 import adminRoutes from "./src/routes/admin.routes.js";
+import teamRoutes from "./src/routes/team.routes.js";
+import tradeRoutes from "./src/routes/trade.routes.js";
+
 
 
 
@@ -37,6 +40,8 @@ app.use("/api", withdrawalRoutes);
 app.use("/api", tatumRoutes);
 app.use("/api", tatumWebhookRoutes);
 app.use("/api", adminRoutes);
+app.use("/api", teamRoutes);
+app.use("/api", tradeRoutes);
 
 
 db();

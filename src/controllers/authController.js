@@ -303,7 +303,7 @@ const getMe = async (req, res) => {
 
 const googleLogin = async (req, res) => {
   try {
-    const { token } = req.body;
+    const { token, referralCode: inputReferralCode } = req.body;
 
     if (!token) {
       return res.status(400).json({
@@ -371,6 +371,28 @@ const googleLogin = async (req, res) => {
 
       return referralCode;
     };
+
+
+    // -------------------------
+    // Find referring user
+    // -------------------------
+    let referrer = null;
+
+    if (inputReferralCode && inputReferralCode.trim()) {
+      const normalizedReferralCode =
+        inputReferralCode.trim().toUpperCase();
+
+      referrer = await User.findOne({
+        referralCode: normalizedReferralCode,
+      });
+
+      if (!referrer) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid referral code",
+        });
+      }
+    }
 
     // -------------------------
     // Existing user
@@ -447,7 +469,9 @@ const googleLogin = async (req, res) => {
 
         referralCode,
 
-        referredBy: null,
+        referredBy: referrer
+          ? referrer._id
+          : null,
 
         teamLevel: 1,
 
