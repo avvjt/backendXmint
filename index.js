@@ -12,8 +12,7 @@ import tatumWebhookRoutes from "./src/routes/tatumWebhook.routes.js";
 import adminRoutes from "./src/routes/admin.routes.js";
 import teamRoutes from "./src/routes/team.routes.js";
 import tradeRoutes from "./src/routes/trade.routes.js";
-
-
+import dashboardRoutes from "./src/routes/dashboard.routes.js";
 
 
 const app = express();
@@ -42,6 +41,10 @@ app.use("/api", tatumWebhookRoutes);
 app.use("/api", adminRoutes);
 app.use("/api", teamRoutes);
 app.use("/api", tradeRoutes);
+app.use(
+  "/api",
+  dashboardRoutes
+);
 
 
 db();
