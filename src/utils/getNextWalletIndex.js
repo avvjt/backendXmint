@@ -2,7 +2,9 @@ import WalletCounter from "../models/walletCounter.model.js";
 
 const getNextWalletIndex = async () => {
   const counter = await WalletCounter.findOneAndUpdate(
-    { name: "BSC_DEPOSIT" },
+    {
+      name: "BSC_DEPOSIT",
+    },
     {
       $inc: {
         nextIndex: 1,
