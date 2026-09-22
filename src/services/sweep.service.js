@@ -1,4 +1,5 @@
 import { ethers } from "ethers";
+import { ensureGas } from "../utils/gasFunding.js";
 
 /**
  * Derive the private key for a Tatum BSC HD-wallet index.
@@ -260,19 +261,9 @@ if (!rpcUrl) {
   }
 
   /*
-   * Check native BNB balance for gas.
+   *  BNB for gas.
    */
-  const bnbBalance =
-    await provider.getBalance(
-      fromAddress
-    );
-
-  if (bnbBalance === 0n) {
-    throw new Error(
-      `Insufficient BNB for gas. ` +
-      `Address ${fromAddress} has no BNB`
-    );
-  }
+  await ensureGas(fromAddress);
 
   console.log(
     `Sending ${String(amount)} USDT`
