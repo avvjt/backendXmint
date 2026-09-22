@@ -1,6 +1,6 @@
 import User from "../models/user.model.js";
+import cloudinary from "../config/cloudinary.js";
 import fs from "fs/promises";
-import path from "path";
 
 const updateProfile = async (req, res) => {
   try {
@@ -23,7 +23,6 @@ const updateProfile = async (req, res) => {
       });
     }
 
-    // Check whether another user already has this username
     const existingUser = await User.findOne({
       username: normalizedUsername,
       _id: { $ne: req.user.id },
@@ -83,18 +82,55 @@ const uploadAvatar = async (req, res) => {
     const user = await User.findById(req.user.id);
 
     if (!user) {
+      // Remove temporary uploaded file
+      try {
+        await fs.unlink(req.file.path);
+      } catch {}
+
       return res.status(404).json({
         success: false,
         message: "User not found",
       });
     }
 
-    const avatarUrl =
-      `/uploads/profile/${req.file.filename}`;
+    // Upload temporary file to Cloudinary
+    const uploadResult = await cloudinary.uploader.upload(
+      req.file.path,
+      {
+        folder: "cryptomintx/profile",
+        resource_type: "image",
+      }
+    );
 
-    user.avatarUrl = avatarUrl;
+    // Delete old Cloudinary image
+    if (user.avatarPublicId) {
+      try {
+        await cloudinary.uploader.destroy(
+          user.avatarPublicId
+        );
+      } catch (error) {
+        console.error(
+          "Unable to delete old Cloudinary avatar:",
+          error
+        );
+      }
+    }
+
+    // Save new Cloudinary information
+    user.avatarUrl = uploadResult.secure_url;
+    user.avatarPublicId = uploadResult.public_id;
 
     await user.save();
+
+    // Delete temporary local file
+    try {
+      await fs.unlink(req.file.path);
+    } catch (error) {
+      console.error(
+        "Unable to remove temporary avatar:",
+        error
+      );
+    }
 
     return res.status(200).json({
       success: true,
@@ -103,6 +139,13 @@ const uploadAvatar = async (req, res) => {
     });
   } catch (error) {
     console.error("Upload avatar error:", error);
+
+    // Clean up temporary file if it exists
+    if (req.file?.path) {
+      try {
+        await fs.unlink(req.file.path);
+      } catch {}
+    }
 
     return res.status(500).json({
       success: false,
@@ -122,30 +165,21 @@ const deleteAvatar = async (req, res) => {
       });
     }
 
-    // Delete the existing physical image
-    if (user.avatarUrl) {
-      const relativePath = user.avatarUrl.replace(/^\/+/, "");
-
-      const filePath = path.join(
-        process.cwd(),
-        relativePath
-      );
-
+    if (user.avatarPublicId) {
       try {
-        await fs.unlink(filePath);
+        await cloudinary.uploader.destroy(
+          user.avatarPublicId
+        );
       } catch (error) {
-        // File may already be missing
-        if (error.code !== "ENOENT") {
-          console.error(
-            "Unable to delete old avatar:",
-            error
-          );
-        }
+        console.error(
+          "Unable to delete Cloudinary avatar:",
+          error
+        );
       }
     }
 
-    // Remove avatar URL from MongoDB
     user.avatarUrl = "";
+    user.avatarPublicId = "";
 
     await user.save();
 

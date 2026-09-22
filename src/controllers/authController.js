@@ -415,10 +415,10 @@ const googleLogin = async (req, res) => {
         needsSave = true;
       }
 
-      // Add Google profile picture
+      // Add Google profile picture only if user doesn't already have one
       if (
         googleAvatar &&
-        user.avatarUrl !== googleAvatar
+        !user.avatarUrl
       ) {
         user.avatarUrl = googleAvatar;
         needsSave = true;
