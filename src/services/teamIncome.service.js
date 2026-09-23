@@ -175,41 +175,53 @@ const processReferralBonus = async ({
   }
 
   /*
-   * Create the one-time bonus record FIRST.
+   * Check whether this user has already received
+   * the one-time referral bonus.
    *
-   * The unique index on referredUser guarantees
-   * that the same referred user cannot receive
-   * the first-deposit bonus twice.
+   * IMPORTANT:
+   * We check BEFORE attempting to create a duplicate
+   * record. A duplicate-key error inside a MongoDB
+   * transaction can abort the entire transaction.
    */
-  let bonus;
+  const existingBonusQuery = ReferralBonus.findOne({
+    referredUser: referredUser._id,
+  });
 
-  try {
-    [bonus] = await ReferralBonus.create(
-      [
-        {
-          referrer: referrer._id,
-          referredUser: referredUser._id,
-          deposit: depositId,
-          depositAmount: amount,
-          rate: REFERRAL_BONUS_RATE,
-          bonusAmount,
-          status: "COMPLETED",
-          creditedAt: new Date(),
-        },
-      ],
-      session ? { session } : {}
-    );
-  } catch (error) {
-    if (error?.code === 11000) {
-      return {
-        success: true,
-        skipped: true,
-        message: "Referral bonus already processed",
-      };
-    }
-
-    throw error;
+  if (session) {
+    existingBonusQuery.session(session);
   }
+
+  const existingBonus = await existingBonusQuery;
+
+  if (existingBonus) {
+    return {
+      success: true,
+      skipped: true,
+      message: "Referral bonus already processed",
+    };
+  }
+
+  /*
+   * Create the one-time bonus record.
+   *
+   * The unique index on referredUser remains as
+   * an additional protection against duplicate records.
+   */
+  const [bonus] = await ReferralBonus.create(
+    [
+      {
+        referrer: referrer._id,
+        referredUser: referredUser._id,
+        deposit: depositId,
+        depositAmount: amount,
+        rate: REFERRAL_BONUS_RATE,
+        bonusAmount,
+        status: "COMPLETED",
+        creditedAt: new Date(),
+      },
+    ],
+    session ? { session } : {}
+  );
 
   // Only credit the wallet AFTER the bonus record
   // has been successfully created.
@@ -316,29 +328,29 @@ const processTeamCommission = async ({
     }
 
     const wallet = await creditWallet(
-  recipient.user._id,
-  commissionAmount,
-  session
-);
+      recipient.user._id,
+      commissionAmount,
+      session
+    );
 
     const [income] = await TeamIncome.create(
-  [
-    {
-      user: recipient.user._id,
-      sourceUser: sourceUserId,
-      teamLevel: recipient.level,
-      sourceAmount: amount,
-      rate,
-      amount: commissionAmount,
-      type: "TEAM_COMMISSION",
-      referenceId,
-      status: "COMPLETED",
-      description:
-        `Level ${recipient.level} team commission`,
-    },
-  ],
-  session ? { session } : {}
-);
+      [
+        {
+          user: recipient.user._id,
+          sourceUser: sourceUserId,
+          teamLevel: recipient.level,
+          sourceAmount: amount,
+          rate,
+          amount: commissionAmount,
+          type: "TEAM_COMMISSION",
+          referenceId,
+          status: "COMPLETED",
+          description:
+            `Level ${recipient.level} team commission`,
+        },
+      ],
+      session ? { session } : {}
+    );
 
     results.push({
       level: recipient.level,
