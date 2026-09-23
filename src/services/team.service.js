@@ -341,6 +341,8 @@ const syncTeamLevel = async (
   userId,
   session = null
 ) => {
+  console.log("TEAM STEP 1: Getting team members...");
+
   const {
     levelA,
     levelB,
@@ -350,12 +352,23 @@ const syncTeamLevel = async (
     session
   );
 
+  console.log("TEAM STEP 1 DONE:", {
+    levelA: levelA.length,
+    levelB: levelB.length,
+    levelC: levelC.length,
+  });
+
   const calculatedLevel =
     calculateTeamLevel({
       levelA,
       levelB,
       levelC,
     });
+
+  console.log(
+    "TEAM STEP 2: Calculated level:",
+    calculatedLevel
+  );
 
   const userQuery =
     User.findById(userId);
@@ -364,7 +377,11 @@ const syncTeamLevel = async (
     userQuery.session(session);
   }
 
+  console.log("TEAM STEP 3: Loading user...");
+
   const user = await userQuery;
+
+  console.log("TEAM STEP 3 DONE: User loaded");
 
   if (!user) {
     throw new Error("User not found");
@@ -373,6 +390,10 @@ const syncTeamLevel = async (
   if (
     user.teamLevel !== calculatedLevel
   ) {
+    console.log(
+      "TEAM STEP 4: Updating team level..."
+    );
+
     user.teamLevel =
       calculatedLevel;
 
@@ -380,6 +401,14 @@ const syncTeamLevel = async (
       session
         ? { session }
         : {}
+    );
+
+    console.log(
+      "TEAM STEP 4 DONE: Team level saved"
+    );
+  } else {
+    console.log(
+      "TEAM STEP 4 SKIPPED: Team level already correct"
     );
   }
 
