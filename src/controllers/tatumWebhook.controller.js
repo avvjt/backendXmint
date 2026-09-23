@@ -356,23 +356,63 @@ const tatumWebhook = async (req, res) => {
       console.log("TX:", txHash);
       console.log("=================================");
     } catch (transactionError) {
-      await session.abortTransaction();
+  console.error(
+    "========== TRANSACTION ERROR =========="
+  );
 
-      // Unique txHash protection
-      if (transactionError?.code === 11000) {
-        console.log(
-          "Duplicate transaction prevented:",
-          txHash
-        );
+  console.error(
+    "Name:",
+    transactionError?.name
+  );
 
-        return res.status(200).json({
-          success: true,
-          message: "Deposit already processed",
-        });
-      }
+  console.error(
+    "Message:",
+    transactionError?.message
+  );
 
-      throw transactionError;
-    } finally {
+  console.error(
+    "Code:",
+    transactionError?.code
+  );
+
+  console.error(
+    "CodeName:",
+    transactionError?.codeName
+  );
+
+  console.error(
+    "Stack:",
+    transactionError?.stack
+  );
+
+  console.error(
+    "========================================"
+  );
+
+  try {
+    await session.abortTransaction();
+  } catch (abortError) {
+    console.error(
+      "Transaction abort error:",
+      abortError?.message
+    );
+  }
+
+  // Unique txHash protection
+  if (transactionError?.code === 11000) {
+    console.log(
+      "Duplicate transaction prevented:",
+      txHash
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: "Deposit already processed",
+    });
+  }
+
+  throw transactionError;
+} finally {
       await session.endSession();
     }
 
