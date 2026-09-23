@@ -172,15 +172,15 @@ const tatumWebhook = async (req, res) => {
     // ==================================================
 
     const decimals = Number(
-  data?.tokenMetadata?.decimals ?? 18
-);
+      data?.tokenMetadata?.decimals ?? 18
+    );
 
-const numericValue = Number(rawValue);
+    const numericValue = Number(rawValue);
 
-const amount =
-  String(rawValue).includes(".")
-    ? numericValue
-    : numericValue / Math.pow(10, decimals);
+    const amount =
+      String(rawValue).includes(".")
+        ? numericValue
+        : numericValue / Math.pow(10, decimals);
 
     if (!Number.isFinite(amount) || amount <= 0) {
       console.warn("Invalid token amount:", {
@@ -318,59 +318,59 @@ const amount =
 
       console.log("STEP 1: Creating Transaction...");
 
-await Transaction.create(
-  [
-    {
-      user: wallet.user,
-      wallet: wallet._id,
-      type: "DEPOSIT",
-      asset: "USDT",
-      network: "BEP20",
-      amount,
-      status: "COMPLETED",
-      referenceId: deposit[0]._id,
-      txHash,
-      description: "BSC Mainnet USDT deposit",
-    },
-  ],
-  { session }
-);
+      await Transaction.create(
+        [
+          {
+            user: wallet.user,
+            wallet: wallet._id,
+            type: "DEPOSIT",
+            asset: "USDT",
+            network: "BEP20",
+            amount,
+            status: "COMPLETED",
+            referenceId: deposit[0]._id,
+            txHash,
+            description: "BSC Mainnet USDT deposit",
+          },
+        ],
+        { session }
+      );
 
-console.log("STEP 1 DONE: Transaction created");
+      console.log("STEP 1 DONE: Transaction created");
 
-console.log("STEP 2: Processing referral bonus...");
+      console.log("STEP 2: Processing referral bonus...");
 
-referralBonus = await processReferralBonus({
-  referredUserId: wallet.user,
-  depositId: deposit[0]._id,
-  depositAmount: amount,
-  session,
-});
+      referralBonus = await processReferralBonus({
+        referredUserId: wallet.user,
+        depositId: deposit[0]._id,
+        depositAmount: amount,
+        session,
+      });
 
-console.log("STEP 2 DONE: Referral bonus processed");
+      console.log("STEP 2 DONE: Referral bonus processed");
 
-console.log("CHECKPOINT: Testing transaction after referral...");
+      console.log("CHECKPOINT: Testing transaction after referral...");
 
-await UserPackage.findOne({
-  user: wallet.user,
-}).session(session);
+      await UserPackage.findOne({
+        user: wallet.user,
+      }).session(session);
 
-console.log("CHECKPOINT PASSED: Transaction is still active");
+      console.log("CHECKPOINT PASSED: Transaction is still active");
 
-console.log("STEP 3: Syncing team level...");
+      console.log("STEP 3: Syncing team level...");
 
-await syncTeamLevel(
-  wallet.user,
-  session
-);
+      await syncTeamLevel(
+        wallet.user,
+        session
+      );
 
-console.log("STEP 3 DONE: Team level synced");
+      console.log("STEP 3 DONE: Team level synced");
 
-console.log("STEP 4: Committing transaction...");
+      console.log("STEP 4: Committing transaction...");
 
-await session.commitTransaction();
+      await session.commitTransaction();
 
-console.log("STEP 4 DONE: Transaction committed");
+      console.log("STEP 4 DONE: Transaction committed");
 
       console.log("=================================");
       console.log("DEPOSIT CREDITED SUCCESSFULLY");
@@ -379,63 +379,63 @@ console.log("STEP 4 DONE: Transaction committed");
       console.log("TX:", txHash);
       console.log("=================================");
     } catch (transactionError) {
-  console.error(
-    "========== TRANSACTION ERROR =========="
-  );
+      console.error(
+        "========== TRANSACTION ERROR =========="
+      );
 
-  console.error(
-    "Name:",
-    transactionError?.name
-  );
+      console.error(
+        "Name:",
+        transactionError?.name
+      );
 
-  console.error(
-    "Message:",
-    transactionError?.message
-  );
+      console.error(
+        "Message:",
+        transactionError?.message
+      );
 
-  console.error(
-    "Code:",
-    transactionError?.code
-  );
+      console.error(
+        "Code:",
+        transactionError?.code
+      );
 
-  console.error(
-    "CodeName:",
-    transactionError?.codeName
-  );
+      console.error(
+        "CodeName:",
+        transactionError?.codeName
+      );
 
-  console.error(
-    "Stack:",
-    transactionError?.stack
-  );
+      console.error(
+        "Stack:",
+        transactionError?.stack
+      );
 
-  console.error(
-    "========================================"
-  );
+      console.error(
+        "========================================"
+      );
 
-  try {
-    await session.abortTransaction();
-  } catch (abortError) {
-    console.error(
-      "Transaction abort error:",
-      abortError?.message
-    );
-  }
+      try {
+        await session.abortTransaction();
+      } catch (abortError) {
+        console.error(
+          "Transaction abort error:",
+          abortError?.message
+        );
+      }
 
-  // Unique txHash protection
-  if (transactionError?.code === 11000) {
-    console.log(
-      "Duplicate transaction prevented:",
-      txHash
-    );
+      // Unique txHash protection
+      if (transactionError?.code === 11000) {
+        console.log(
+          "Duplicate transaction prevented:",
+          txHash
+        );
 
-    return res.status(200).json({
-      success: true,
-      message: "Deposit already processed",
-    });
-  }
+        return res.status(200).json({
+          success: true,
+          message: "Deposit already processed",
+        });
+      }
 
-  throw transactionError;
-} finally {
+      throw transactionError;
+    } finally {
       await session.endSession();
     }
 
