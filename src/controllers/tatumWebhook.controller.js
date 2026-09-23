@@ -345,6 +345,14 @@ referralBonus = await processReferralBonus({
 
 console.log("STEP 2 DONE: Referral bonus processed");
 
+console.log("CHECKPOINT: Testing transaction after referral...");
+
+await UserPackage.findOne({
+  user: wallet.user,
+}).session(session);
+
+console.log("CHECKPOINT PASSED: Transaction is still active");
+
 console.log("STEP 3: Syncing team level...");
 
 await syncTeamLevel(
