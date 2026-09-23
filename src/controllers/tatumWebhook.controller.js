@@ -172,11 +172,15 @@ const tatumWebhook = async (req, res) => {
     // ==================================================
 
     const decimals = Number(
-      data?.tokenMetadata?.decimals ?? 18
-    );
+  data?.tokenMetadata?.decimals ?? 18
+);
 
-    const amount =
-      Number(rawValue) / Math.pow(10, decimals);
+const numericValue = Number(rawValue);
+
+const amount =
+  String(rawValue).includes(".")
+    ? numericValue
+    : numericValue / Math.pow(10, decimals);
 
     if (!Number.isFinite(amount) || amount <= 0) {
       console.warn("Invalid token amount:", {
