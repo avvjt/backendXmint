@@ -312,42 +312,53 @@ const tatumWebhook = async (req, res) => {
         });
       }
 
-      await Transaction.create(
-        [
-          {
-            user: wallet.user,
-            wallet: wallet._id,
-            type: "DEPOSIT",
-            asset: "USDT",
-            network: "BEP20",
-            amount,
-            status: "COMPLETED",
-            referenceId: deposit[0]._id,
-            txHash,
-            description: "BSC Mainnet USDT deposit",
-          },
-        ],
-        { session }
-      );
+      console.log("STEP 1: Creating Transaction...");
 
-      // ================================================
-      // REFERRAL BONUS
-      // ================================================
+await Transaction.create(
+  [
+    {
+      user: wallet.user,
+      wallet: wallet._id,
+      type: "DEPOSIT",
+      asset: "USDT",
+      network: "BEP20",
+      amount,
+      status: "COMPLETED",
+      referenceId: deposit[0]._id,
+      txHash,
+      description: "BSC Mainnet USDT deposit",
+    },
+  ],
+  { session }
+);
 
-      referralBonus = await processReferralBonus({
-        referredUserId: wallet.user,
-        depositId: deposit[0]._id,
-        depositAmount: amount,
-        session,
-      });
+console.log("STEP 1 DONE: Transaction created");
 
-      await syncTeamLevel(
+console.log("STEP 2: Processing referral bonus...");
+
+referralBonus = await processReferralBonus({
+  referredUserId: wallet.user,
+  depositId: deposit[0]._id,
+  depositAmount: amount,
+  session,
+});
+
+console.log("STEP 2 DONE: Referral bonus processed");
+
+console.log("STEP 3: Syncing team level...");
+
+await syncTeamLevel(
   wallet.user,
   session
 );
 
-      // NOW COMMIT EVERYTHING
-      await session.commitTransaction();
+console.log("STEP 3 DONE: Team level synced");
+
+console.log("STEP 4: Committing transaction...");
+
+await session.commitTransaction();
+
+console.log("STEP 4 DONE: Transaction committed");
 
       console.log("=================================");
       console.log("DEPOSIT CREDITED SUCCESSFULLY");
