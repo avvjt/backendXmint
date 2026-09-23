@@ -72,7 +72,7 @@ const tatumWebhook = async (req, res) => {
     // 2. GET TATUM ENRICHED DATA
     // ==================================================
 
-    const data = req.body?.data;
+    const data = req.body?.data ?? req.body;
 
     if (!data) {
       console.log("No data object in Tatum webhook");
