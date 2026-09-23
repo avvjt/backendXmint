@@ -23,8 +23,7 @@ const payload = {
       "0x55d398326f99059ff775485246999027b3197955",
 
     // 55 USDT with 18 decimals
-    value:
-      "55000000000000000000",
+    value: "1.1",
 
     tokenMetadata: {
       symbol: "USDT",
