@@ -3,26 +3,24 @@ import User from "../models/user.model.js";
 import Deposit from "../models/deposit.model.js";
 import Transaction from "../models/transaction.model.js";
 import createWalletForUser from "../utils/createWallet.js";
-
-import Wallet from "../models/wallet.model.js";
 import Trade from "../models/trade.model.js";
 
-// GET /api/wallet
-export const getWallet = async (req, res) => {
+const getWallet = async (req, res) => {
   try {
-    const userId = req.user._id;
+    const user = await User.findById(req.user.id);
 
-    let wallet = await Wallet.findOne({ user: userId });
-
-    // Create wallet if it doesn't exist
-    if (!wallet) {
-      wallet = await Wallet.create({
-        user: userId,
-        asset: "USDT",
-        network: "BEP20",
-        availableBalance: 0,
-        lockedBalance: 0,
+    if (!user) {
+      return res.status(404).json({
+        message: "User not found",
       });
+    }
+
+    let wallet = await Wallet.findOne({
+      user: user._id,
+    });
+
+    if (!wallet) {
+      wallet = await createWalletForUser(user._id);
     }
 
     const now = new Date();
@@ -31,7 +29,7 @@ export const getWallet = async (req, res) => {
     // Find currently processing Auto Trade
     // --------------------------------------------------
     const processingTrade = await Trade.findOne({
-      user: userId,
+      user: user._id,
       type: "AUTO",
       status: "PROCESSING",
     })
@@ -42,14 +40,15 @@ export const getWallet = async (req, res) => {
     // Find latest completed Auto Trade
     // --------------------------------------------------
     const lastAutoTrade = await Trade.findOne({
-      user: userId,
+      user: user._id,
       type: "AUTO",
       status: "COMPLETED",
     })
       .sort({ completedAt: -1 })
       .lean();
 
-    const processingUntil = processingTrade?.processingUntil || null;
+    const processingUntil =
+      processingTrade?.processingUntil || null;
 
     let cooldownUntil = null;
 
@@ -64,8 +63,13 @@ export const getWallet = async (req, res) => {
     const isProcessing = Boolean(processingTrade);
     const isCooldown = Boolean(cooldownUntil);
 
-    const availableBalance = Number(wallet.availableBalance || 0);
-    const lockedBalance = Number(wallet.lockedBalance || 0);
+    const availableBalance = Number(
+      wallet.availableBalance || 0
+    );
+
+    const lockedBalance = Number(
+      wallet.lockedBalance || 0
+    );
 
     // --------------------------------------------------
     // Determine Auto Trade state
@@ -97,7 +101,8 @@ export const getWallet = async (req, res) => {
         availableBalance,
         lockedBalance,
 
-        totalBalance: availableBalance + lockedBalance,
+        totalBalance:
+          availableBalance + lockedBalance,
 
         // Auto Trade state
         processingUntil,
@@ -115,7 +120,6 @@ export const getWallet = async (req, res) => {
     console.error("Get wallet error:", error);
 
     return res.status(500).json({
-      success: false,
       message: "Failed to fetch wallet",
     });
   }
@@ -163,4 +167,8 @@ const getTransactions = async (req, res) => {
   }
 };
 
-export { getWallet, getDeposits, getTransactions };
+export {
+  getWallet,
+  getDeposits,
+  getTransactions,
+};
