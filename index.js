@@ -13,6 +13,9 @@ import adminRoutes from "./src/routes/admin.routes.js";
 import teamRoutes from "./src/routes/team.routes.js";
 import tradeRoutes from "./src/routes/trade.routes.js";
 import dashboardRoutes from "./src/routes/dashboard.routes.js";
+import {
+  finalizeExpiredAutoTrades,
+} from "./src/services/autoTrade.service.js";
 
 
 const app = express();
@@ -49,10 +52,54 @@ app.use(
 
 db();
 
-app.get("/", (req,res) => {
-    res.send("Hello world!")
-})
+app.get("/", (req, res) => {
+  res.send("Hello world!");
+});
+
+/*
+|--------------------------------------------------------------------------
+| AUTO TRADE FINALIZER
+|--------------------------------------------------------------------------
+|
+| Check for completed 5-minute Auto Trades every minute.
+|
+*/
+
+const AUTO_TRADE_CHECK_INTERVAL = 60 * 1000;
+
+const runAutoTradeFinalizer = async () => {
+  try {
+    const count =
+      await finalizeExpiredAutoTrades();
+
+    if (count > 0) {
+      console.log(
+        `[AutoTrade] Finalized ${count} expired trade(s).`
+      );
+    }
+  } catch (error) {
+    console.error(
+      "[AutoTrade] Finalizer error:",
+      error
+    );
+  }
+};
 
 app.listen(3000, () => {
-    console.log("Server is running on port 3000");
-})
+  console.log(
+    "Server is running on port 3000"
+  );
+
+  /*
+   * Run once when server starts.
+   */
+  runAutoTradeFinalizer();
+
+  /*
+   * Then check every minute.
+   */
+  setInterval(
+    runAutoTradeFinalizer,
+    AUTO_TRADE_CHECK_INTERVAL
+  );
+});
