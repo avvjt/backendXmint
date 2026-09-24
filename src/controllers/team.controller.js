@@ -45,6 +45,7 @@ const getMembers = async (req, res) => {
       id: member._id,
       name: member.fullName,
       username: member.username,
+      avatarUrl: member.avatarUrl || "",
       level,
       status: member.accountStatus,
       todayEarning: 0,
