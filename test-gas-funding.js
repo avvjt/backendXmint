@@ -2,7 +2,7 @@ import "dotenv/config";
 import { ensureGas } from "./src/utils/gasFunding.js";
 
 const depositAddress =
-  "0x6040758b3a67f35a959b3659e688a2c7a313b0bd";
+  "0xaD9feBc0d66b13e2D56940f8778BB4e693054987";
 
 try {
   const result = await ensureGas(depositAddress);

@@ -1,3 +1,4 @@
+
 import mongoose from "mongoose";
 
 const depositSchema = new mongoose.Schema(
@@ -33,13 +34,14 @@ const depositSchema = new mongoose.Schema(
       type: String,
       required: true,
       trim: true,
+      lowercase: true,
       index: true,
     },
 
     amount: {
       type: Number,
       required: true,
-      min: 0,
+      min: 50,
     },
 
     txHash: {
@@ -47,11 +49,19 @@ const depositSchema = new mongoose.Schema(
       required: true,
       unique: true,
       trim: true,
+      lowercase: true,
+      index: true,
     },
 
     status: {
       type: String,
-      enum: ["PENDING", "CONFIRMED", "FAILED"],
+      enum: [
+        "PENDING",
+        "UNDER_REVIEW",
+        "CONFIRMED",
+        "REJECTED",
+        "FAILED",
+      ],
       default: "PENDING",
       index: true,
     },
@@ -62,6 +72,29 @@ const depositSchema = new mongoose.Schema(
       min: 0,
     },
 
+    submittedAt: {
+      type: Date,
+      default: Date.now,
+    },
+
+    reviewedAt: {
+      type: Date,
+      default: null,
+    },
+
+    reviewedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+
+    rejectionReason: {
+      type: String,
+      trim: true,
+      maxlength: 500,
+      default: null,
+    },
+
     confirmedAt: {
       type: Date,
       default: null,
@@ -70,6 +103,38 @@ const depositSchema = new mongoose.Schema(
     creditedAt: {
       type: Date,
       default: null,
+    },
+
+    // Stores the verified on-chain amount separately
+    // from the amount submitted by the user.
+    verifiedAmount: {
+      type: Number,
+      min: 0,
+      default: null,
+    },
+
+    // Set only after successful backend transaction verification.
+    verificationData: {
+      blockNumber: {
+        type: Number,
+        default: null,
+      },
+      tokenContract: {
+        type: String,
+        trim: true,
+        lowercase: true,
+        default: null,
+      },
+      fromAddress: {
+        type: String,
+        trim: true,
+        lowercase: true,
+        default: null,
+      },
+      verifiedAt: {
+        type: Date,
+        default: null,
+      },
     },
   },
   {

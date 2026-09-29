@@ -16,6 +16,9 @@ import dashboardRoutes from "./src/routes/dashboard.routes.js";
 import {
   finalizeExpiredAutoTrades,
 } from "./src/services/autoTrade.service.js";
+import depositRoutes from "./src/routes/deposit.routes.js";
+import adminDepositRoutes from "./src/routes/adminDeposit.routes.js";
+
 
 
 const app = express();
@@ -48,6 +51,11 @@ app.use(
   "/api",
   dashboardRoutes
 );
+app.use(
+  "/api",
+  depositRoutes
+);
+app.use("/api", adminDepositRoutes);
 
 
 db();
