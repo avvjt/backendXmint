@@ -25,7 +25,8 @@ const app = express();
 app.use(cors({
   origin: [
     "http://localhost:5173",
-    "https://cryptomintx.co.in"
+    "https://cryptomintx.co.in",
+    "https://www.cryptomintx.co.in"
   ],
   credentials: true,
 }));
