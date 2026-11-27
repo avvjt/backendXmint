@@ -1,4 +1,3 @@
-
 import mongoose from "mongoose";
 
 const depositSchema = new mongoose.Schema(
@@ -16,6 +15,15 @@ const depositSchema = new mongoose.Schema(
       required: true,
     },
 
+    // Payment method
+    paymentMethod: {
+      type: String,
+      enum: ["BEP20", "UPI"],
+      default: "BEP20",
+      required: true,
+      index: true,
+    },
+
     asset: {
       type: String,
       enum: ["USDT"],
@@ -25,32 +33,86 @@ const depositSchema = new mongoose.Schema(
 
     network: {
       type: String,
-      enum: ["BEP20"],
+      enum: ["BEP20", "UPI"],
       default: "BEP20",
       required: true,
     },
 
+    // Required only for BEP20 deposits.
     depositAddress: {
       type: String,
-      required: true,
       trim: true,
       lowercase: true,
-      index: true,
+      default: null,
     },
 
+    // Always represents the USDT amount to credit.
     amount: {
       type: Number,
       required: true,
-      min: 50,
+      min: 0.000001,
     },
 
+    // BEP20 transaction hash.
     txHash: {
       type: String,
-      required: true,
-      unique: true,
       trim: true,
       lowercase: true,
-      index: true,
+      default: undefined,
+    },
+
+    // UPI deposit information.
+    inrAmount: {
+      type: Number,
+      min: 1000,
+      default: null,
+    },
+
+    exchangeRate: {
+      type: Number,
+      min: 0,
+      default: null,
+    },
+
+    rateSource: {
+      type: String,
+      default: null,
+      trim: true,
+    },
+
+    rateFetchedAt: {
+      type: Date,
+      default: null,
+    },
+
+    utr: {
+      type: String,
+      trim: true,
+      uppercase: true,
+      default: undefined,
+    },
+
+    paymentScreenshot: {
+      url: {
+        type: String,
+        default: null,
+      },
+      publicId: {
+        type: String,
+        default: null,
+      },
+    },
+
+    // Snapshot of the UPI payment destination.
+    paymentDetails: {
+      upiId: {
+        type: String,
+        default: null,
+      },
+      payeeName: {
+        type: String,
+        default: null,
+      },
     },
 
     status: {
@@ -105,15 +167,13 @@ const depositSchema = new mongoose.Schema(
       default: null,
     },
 
-    // Stores the verified on-chain amount separately
-    // from the amount submitted by the user.
+    // Existing blockchain verification fields.
     verifiedAmount: {
       type: Number,
       min: 0,
       default: null,
     },
 
-    // Set only after successful backend transaction verification.
     verificationData: {
       blockNumber: {
         type: Number,
@@ -139,6 +199,29 @@ const depositSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
+  }
+);
+
+// Only index actual blockchain transaction hashes.
+// UPI deposits don't have transaction hashes.
+depositSchema.index(
+  { txHash: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      txHash: { $type: "string" },
+    },
+  }
+);
+
+// Prevent the same UTR from being submitted by multiple users.
+depositSchema.index(
+  { utr: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      utr: { $type: "string" },
+    },
   }
 );
 
