@@ -6,6 +6,10 @@ import {
 } from "../controllers/admin.controller.js";
 
 import protect from "../middlewares/auth.middleware.js";
+import {
+  getUpiSettings,
+  updateUpiSettings,
+} from "../controllers/paymentSettings.controller.js";
 import requireAdmin from "../middlewares/admin.middleware.js";
 
 const router = express.Router();
@@ -24,6 +28,21 @@ router.get(
   protect,
   requireAdmin,
   getAdminWithdrawals
+);
+
+// UPI Payment Settings - admin only
+router.get(
+  "/admin/payment-settings/upi",
+  protect,
+  requireAdmin,
+  getUpiSettings
+);
+
+router.put(
+  "/admin/payment-settings/upi",
+  protect,
+  requireAdmin,
+  updateUpiSettings
 );
 
 export default router;
