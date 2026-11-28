@@ -105,3 +105,43 @@ export const submitManualDeposit = async (req, res) => {
     });
   }
 };
+
+
+// ==========================================
+// GET LOGGED-IN USER'S DEPOSIT HISTORY
+// ==========================================
+
+export const getMyDeposits = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+
+    if (!userId || !mongoose.isValidObjectId(userId)) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required.",
+      });
+    }
+
+    const deposits = await Deposit.find({
+      user: userId,
+    })
+      .select(
+        "paymentMethod asset network amount inrAmount exchangeRate utr txHash status rejectionReason submittedAt createdAt confirmedAt"
+      )
+      .sort({ createdAt: -1 })
+      .limit(50)
+      .lean();
+
+    return res.status(200).json({
+      success: true,
+      deposits,
+    });
+  } catch (error) {
+    console.error("User deposit history error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Unable to fetch deposit history.",
+    });
+  }
+};
